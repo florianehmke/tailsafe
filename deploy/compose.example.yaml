@@ -1,0 +1,94 @@
+---
+services:
+  configurator:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-configurator:${TAILSAFE_VERSION}
+    environment:
+      TAILSAFE_SITE_CONFIG: /input/site.json
+      TAILSAFE_GENERATED_DIR: /generated
+      TAILSAFE_BACKUP_HTTP_USER: ${TAILSAFE_BACKUP_HTTP_USER}
+      TAILSAFE_BACKUP_HTTP_PASSWORD: ${TAILSAFE_BACKUP_HTTP_PASSWORD}
+      TAILSAFE_MAINT_HTTP_USER: ${TAILSAFE_MAINT_HTTP_USER}
+      TAILSAFE_MAINT_HTTP_PASSWORD: ${TAILSAFE_MAINT_HTTP_PASSWORD}
+      RESTIC_REPOSITORY_PASSWORD: ${RESTIC_REPOSITORY_PASSWORD}
+    volumes:
+      - ${BACKREST_DATA_ROOT}/generated:/generated
+      - ${SITE_CONFIG_PATH}:/input/site.json:ro
+    restart: "no"
+
+  tailscale-outbound:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-tailscale:${TAILSAFE_VERSION}
+    environment:
+      TS_AUTHKEY: ${TS_OUTBOUND_AUTHKEY}
+      TS_HOSTNAME: ${TS_OUTBOUND_HOSTNAME}
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - ${TAILSAFE_STATE_ROOT}/outbound:/var/lib/tailscale
+    ports:
+      - "127.0.0.1:${BACKREST_BIND_PORT}:9898"
+    restart: unless-stopped
+
+  tailscale-endpoint:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-tailscale:${TAILSAFE_VERSION}
+    environment:
+      TS_AUTHKEY: ${TS_ENDPOINT_AUTHKEY}
+      TS_HOSTNAME: ${TS_ENDPOINT_HOSTNAME}
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - ${TAILSAFE_STATE_ROOT}/endpoint:/var/lib/tailscale
+    restart: unless-stopped
+
+  backrest:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-backrest:${TAILSAFE_VERSION}
+    network_mode: service:tailscale-outbound
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      tailscale-outbound:
+        condition: service_started
+    environment:
+      BACKREST_PORT: 0.0.0.0:9898
+      BACKREST_CONFIG: /generated/backrest-config.json
+      BACKREST_DATA: /data
+      XDG_CACHE_HOME: /cache
+      TMPDIR: /tmp
+      TZ: ${TZ}
+      RESTIC_REPOSITORY_PASSWORD: ${RESTIC_REPOSITORY_PASSWORD}
+    volumes:
+      - ${BACKREST_DATA_ROOT}/generated:/generated
+      - ${BACKREST_DATA_ROOT}/data:/data
+      - ${BACKREST_DATA_ROOT}/cache:/cache
+      - ${BACKREST_DATA_ROOT}/tmp:/tmp
+      - ${USERDATA_ROOT}:/userdata:ro
+    restart: unless-stopped
+
+  rest-server-backup:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-rest-server:${TAILSAFE_VERSION}
+    network_mode: service:tailscale-endpoint
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      tailscale-endpoint:
+        condition: service_started
+    environment:
+      OPTIONS: --listen :8000 --append-only
+      PASSWORD_FILE: /generated/rest-server-backup.htpasswd
+    volumes:
+      - ${BACKREST_DATA_ROOT}/generated:/generated:ro
+      - ${REPO_DATA_ROOT}:/data
+    restart: unless-stopped
+
+  rest-server-maintenance:
+    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-rest-server:${TAILSAFE_VERSION}
+    network_mode: service:tailscale-endpoint
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      tailscale-endpoint:
+        condition: service_started
+    environment:
+      OPTIONS: --listen :8001
+      PASSWORD_FILE: /generated/rest-server-maint.htpasswd
+    volumes:
+      - ${BACKREST_DATA_ROOT}/generated:/generated:ro
+      - ${REPO_DATA_ROOT}:/data
+    restart: unless-stopped

@@ -1,0 +1,47 @@
+{
+  "instance": "tailsafe-site-a",
+  "auth": {
+    "disabled": true
+  },
+  "remote": {
+    "id": "friend-b",
+    "backupUri": "rest:http://backup:${TAILSAFE_BACKUP_HTTP_PASSWORD}@friend-b-endpoint.ts.net:8000/friend-b",
+    "maintenanceUri": "rest:http://maint:${TAILSAFE_MAINT_HTTP_PASSWORD}@friend-b-endpoint.ts.net:8001/friend-b",
+    "repositoryPassword": "${RESTIC_REPOSITORY_PASSWORD}"
+  },
+  "defaults": {
+    "backupCron": "15 2 * * *",
+    "checkCron": "20 3 * * 0",
+    "forgetCron": "35 3 * * 0",
+    "pruneCron": "50 3 * * 0",
+    "retention": {
+      "daily": 30,
+      "weekly": 8,
+      "monthly": 12,
+      "yearly": 2
+    }
+  },
+  "healthchecks": {
+    "check": "https://hc-ping.com/check-uuid",
+    "forget": "https://hc-ping.com/forget-uuid",
+    "prune": "https://hc-ping.com/prune-uuid"
+  },
+  "sources": [
+    {
+      "id": "photos",
+      "paths": ["/userdata/photos"],
+      "excludes": ["**/.DS_Store"],
+      "healthchecks": {
+        "backup": "https://hc-ping.com/photos-uuid"
+      }
+    },
+    {
+      "id": "volsync-prod",
+      "paths": ["/userdata/volsync/prod"],
+      "excludes": [],
+      "healthchecks": {
+        "backup": "https://hc-ping.com/volsync-prod-uuid"
+      }
+    }
+  ]
+}

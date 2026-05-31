@@ -1,0 +1,39 @@
+min_version = "2026.4.0"
+
+[tools]
+python = "3.12"
+shellcheck = "0.10.0"
+yamllint = "1.35.1"
+actionlint = "1.7.7"
+
+[tasks."lint:yaml"]
+description = "Lint YAML and workflow files"
+run = "./.cicd/scripts/lint-yaml.sh"
+
+[tasks."lint:shell"]
+description = "Lint shell entrypoints and helper scripts"
+run = "./.cicd/scripts/lint-shell.sh"
+
+[tasks."lint:actions"]
+description = "Lint GitHub Actions workflows"
+run = "./.cicd/scripts/lint-actions.sh"
+
+[tasks.test]
+description = "Run Python-based unit tests"
+run = "./.cicd/scripts/test.sh"
+
+[tasks."validate:compose"]
+description = "Render the example compose file"
+run = "./.cicd/scripts/validate-compose.sh"
+
+[tasks."smoke:configurator"]
+description = "Generate runtime artifacts from the example site file"
+run = "./.cicd/scripts/smoke-configurator.sh"
+
+[tasks.ci]
+description = "Run the full TailSafe validation suite"
+run = "./.cicd/scripts/ci.sh"
+
+[tasks."check:release"]
+description = "Run the full pre-release validation suite"
+run = "./.cicd/scripts/check-release.sh"

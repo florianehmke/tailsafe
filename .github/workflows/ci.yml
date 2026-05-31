@@ -1,0 +1,45 @@
+---
+name: ci
+
+'on':
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: Run TailSafe CI
+        run: ./.cicd/scripts/ci.sh
+
+  build-images:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: tailsafe-configurator
+            dockerfile: containers/configurator/Dockerfile
+          - image: tailsafe-backrest
+            dockerfile: containers/backrest/Dockerfile
+          - image: tailsafe-rest-server
+            dockerfile: containers/rest-server/Dockerfile
+          - image: tailsafe-tailscale
+            dockerfile: containers/tailscale/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
