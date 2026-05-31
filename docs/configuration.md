@@ -2,79 +2,104 @@
 
 TailSafe separates published examples from the files you actually run at each site. Copy the example files, fill in secrets locally, and keep production copies out of version control.
 
+If you are doing your first real rollout with a friend, follow the step-by-step [Setup guide](setup-guide.md) first. This page is the field reference and lifecycle reference for the generated files.
+
 ## User-owned files
 
-These three files define how a live TailSafe deployment behaves. They are not committed by the project; you create and maintain them on each Synology (or other host).
+These files define how a live TailSafe deployment behaves. They are not committed by the project; you create and maintain them on each Synology (or other host).
 
 ### `deploy/compose.yaml`
 
-Your site-local Compose file. Start from `deploy/compose.example.yaml` and adjust image tags, volume paths, and hostname values for your environment. This file wires together the configurator, Tailscale containers, Backrest, and the two rest-server instances.
+Your site-local **base** Compose file. Start from `deploy/compose.example.yaml` and adjust image tags, volume paths, and local ports for your environment. This base file wires together the configurator, the outbound Tailscale node, and Backrest.
+
+The inbound endpoint services are now generated dynamically into `${BACKREST_DATA_ROOT}/generated/compose.endpoints.yaml` based on `config/site.json`.
 
 ### `.env`
 
-Environment variables consumed by Compose and passed into the configurator. Start from `env.example`. It holds Tailscale auth keys, HTTP credentials for the rest-server endpoints, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), and the path to your site file (`SITE_CONFIG_PATH`).
+Environment variables consumed by Compose and also passed through to the configurator. Start from `env.example`. It holds Tailscale auth keys, per-remote and per-peer HTTP passwords, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), and the path to your site file (`SITE_CONFIG_PATH`).
 
 ### `config/site.json`
 
-The site configuration consumed by the configurator to generate `backrest-config.json`, htpasswd files, and related runtime material. Start from `config/site.example.json`. Each site keeps its own copy with friend-specific URIs, schedules, sources, and Healthchecks.io URLs.
+The site configuration consumed by the configurator to generate `backrest-config.json`, the inbound endpoint compose fragment, peer-specific htpasswd files, and related runtime material. Start from `config/site.example.json`. Each site keeps its own copy with friend-specific remotes, inbound peers, schedules, sources, and Healthchecks.io URLs.
 
 ## Required secrets
 
 Set these in `.env` before starting the stack. Never commit real values to the repository.
 
-Each site runs the **full** TailSafe stack locally, including both Tailscale roles and both rest-server containers. That means **both** `TS_OUTBOUND_AUTHKEY` and `TS_ENDPOINT_AUTHKEY` belong in **each** site's local `.env`—not split across friends.
+Create Tailscale auth keys from the [Tailscale auth keys page](https://login.tailscale.com/admin/settings/keys).
 
-Auth keys come from different tailnet admins even though every site runs the same stack:
+TailSafe now separates **outbound** credentials (what you need to reach a friend's TailSafe stack) from **inbound** credentials (what you define locally so a friend can reach yours).
 
-| Variable | Purpose |
+| Variable pattern | Purpose |
 | --- | --- |
-| `TS_OUTBOUND_AUTHKEY` | Issue this for **this site's own tailnet**. Used by `tailscale-outbound` so Backrest can push backups to the remote friend's endpoint over Tailscale. |
-| `TS_ENDPOINT_AUTHKEY` | Issue this from **your friend** so `tailscale-endpoint` can join **their tailnet** and receive their backup and maintenance traffic. |
-| `TAILSAFE_BACKUP_HTTP_PASSWORD` | Password for the append-only backup rest-server user (`backup` by default). Embedded in the backup repository URI in `site.json`. |
-| `TAILSAFE_MAINT_HTTP_PASSWORD` | Password for the maintenance rest-server user (`maint` by default). Embedded in the maintenance repository URI in `site.json`. |
-| `RESTIC_REPOSITORY_PASSWORD` | Encryption password for the restic repository. Referenced in `site.json` and required by Backrest and restic tooling. |
+| `TS_OUTBOUND_AUTHKEY` | Issue this for **this site's own tailnet**. Used by `tailscale-outbound` so Backrest can push backups to remote endpoint hostnames over Tailscale. |
+| `TS_ENDPOINT_AUTHKEY_<PEER>` | Issue one per inbound friend. Each key comes from **that friend's** tailnet admin so the generated `tailscale-endpoint-<peer>` node can join their tailnet. |
+| `TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_<REMOTE>` | Password for the append-only backup URI you use when pushing to a specific remote TailSafe stack. Your friend gives you this value. |
+| `TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_<REMOTE>` | Password for the maintenance URI you use when running `check`, `forget`, and `prune` against a specific remote TailSafe stack. Your friend gives you this value. |
+| `TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_<PEER>` | Password your local configurator writes into `rest-server-backup-<peer>.htpasswd`. You share this with that friend so they can push backups to you. |
+| `TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_<PEER>` | Password your local configurator writes into `rest-server-maint-<peer>.htpasswd`. You share this with that friend so they can run maintenance against your endpoint. |
+| `RESTIC_REPOSITORY_PASSWORD` | Encryption password for the restic repositories. Referenced in `site.json` and required by Backrest and restic tooling. |
 
 Related non-secret variables must also be set:
 
-| Variable | Purpose |
+| Variable pattern | Purpose |
 | --- | --- |
 | `TS_OUTBOUND_HOSTNAME` | Tailscale hostname registered by this site's outbound node (for example `tailsafe-outbound`). |
-| `TS_ENDPOINT_HOSTNAME` | Tailscale hostname registered by this site's endpoint node (for example `tailsafe-endpoint`). Your friend targets this hostname in their `site.json` URIs. |
-| `TAILSAFE_BACKUP_HTTP_USER` / `TAILSAFE_MAINT_HTTP_USER` | HTTP users for the two rest-server instances (defaults: `backup`, `maint`). |
+| `TS_ENDPOINT_HOSTNAME_<PEER>` | Tailscale hostname registered by the generated endpoint node for that inbound peer. Your friend targets this hostname in their outbound URIs. |
 | `TAILSAFE_IMAGE_NAMESPACE` / `TAILSAFE_VERSION` | GHCR image namespace and pinned tag used by `deploy/compose.yaml` (see `env.example`). |
 | Path roots (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related) | Filesystem locations for generated assets, repository storage, userdata mounts, and Tailscale state. |
 
-The five secret variables above are the credentials that protect cross-site backup access and repository data.
+Legacy single-remote deployments remain supported during the migration window. If you still use the old `remote` schema, TailSafe falls back to `TS_ENDPOINT_AUTHKEY`, `TS_ENDPOINT_HOSTNAME`, `TAILSAFE_BACKUP_HTTP_*`, and `TAILSAFE_MAINT_HTTP_*`.
+
+For every friend relationship in the new model, remember that the endpoint-key flow is two-way:
+
+- you issue one endpoint key for your friend to join **your** tailnet
+- your friend issues one endpoint key for you to join **their** tailnet
 
 ## HTTP credential coordination
 
-The same backup and maintenance HTTP credential pairs in `.env` are used for **both**:
+The multi-site model deliberately separates the two directions:
 
-1. **Local inbound auth** — the configurator writes htpasswd files for your local `rest-server-backup` and `rest-server-maintenance` containers from `TAILSAFE_BACKUP_HTTP_*` and `TAILSAFE_MAINT_HTTP_*`.
-2. **Remote outbound auth** — the configurator expands those same placeholders into the `rest:http://...` URIs in `site.json` that Backrest uses to authenticate to your friend's endpoint.
+1. **Inbound peer credentials** live under `inboundPeers[]` and are written into your local htpasswd files.
+2. **Outbound remote credentials** live inside each `outboundRemotes[]` URI and are used by Backrest when it talks to a friend's endpoint.
 
-Both friends must coordinate and agree on the shared backup credential pair and shared maintenance credential pair. Your outbound URI passwords must match what your friend configured for their inbound rest-server htpasswd files (and vice versa). If the pairs diverge, backups fail with HTTP authentication errors even when Tailscale connectivity is healthy.
+That means you no longer need to reuse one shared password variable for both directions. For each friend:
+
+- you create and share the inbound credentials they should use against your stack
+- they create and share the inbound credentials you should embed in your outbound URIs to reach theirs
+
+If either side uses the wrong pair, backups fail with HTTP authentication errors even when Tailscale connectivity is healthy.
 
 ## Site file model
 
-`config/site.json` is the single structured description of what Backrest should do for this TailSafe instance. The configurator reads it once at startup and writes generated files under `${BACKREST_DATA_ROOT}/generated`.
+`config/site.json` is the structured description of what Backrest should do for this TailSafe instance. The configurator reads it once at startup and writes generated files under `${BACKREST_DATA_ROOT}/generated`.
 
 | Field | Role |
 | --- | --- |
 | `instance` | Local TailSafe instance name. Used to identify this site in generated configuration. |
-| `remote.id` | Identifier for the remote friend (also used as the repository path segment in rest-server URLs). |
-| `remote.backupUri` | Plain `rest:http://...` URI for append-only backups over Tailscale (port `8000` on the friend's endpoint hostname). |
-| `remote.maintenanceUri` | Plain `rest:http://...` URI for maintenance operations over Tailscale (port `8001`). |
-| `remote.repositoryPassword` | Reference to `${RESTIC_REPOSITORY_PASSWORD}` for restic encryption. |
-| `defaults.backupCron` | Daily backup schedule (cron expression). |
-| `defaults.checkCron` | Schedule for repository `check` jobs. |
-| `defaults.forgetCron` | Schedule for retention `forget` jobs. |
-| `defaults.pruneCron` | Schedule for `prune` jobs after forget. |
-| `defaults.retention` | Retention counts (`daily`, `weekly`, `monthly`, `yearly`) applied during forget. |
-| `sources[]` | Mounted folder sources to back up. Each source has an `id`, one or more `paths` (typically under `/userdata`), optional `excludes`, and optional per-source Healthchecks.io URLs. |
-| `healthchecks` | Top-level Healthchecks.io webhook URLs for repository maintenance actions (`check`, `forget`, `prune`). |
+| `outboundRemotes[]` | Each remote TailSafe stack this site sends backups to. Every entry defines an `id`, an endpoint hostname for human reference, explicit backup and maintenance `rest:http://...` URIs, a repository password reference, per-remote maintenance Healthchecks.io URLs, and optional schedule/retention overrides. |
+| `inboundPeers[]` | Each remote friend/tailnet allowed to send backups into this site. Every entry defines an `id`, friend-issued endpoint auth key, endpoint hostname, backup and maintenance HTTP credentials, and a `repositorySubdir` under `${REPO_DATA_ROOT}`. |
+| `defaults.backupCron` | Default backup schedule (cron expression). |
+| `defaults.checkCron` | Default schedule for repository `check` jobs. |
+| `defaults.forgetCron` | Default schedule for retention `forget` jobs. |
+| `defaults.pruneCron` | Default schedule for `prune` jobs after forget. |
+| `defaults.retention` | Default retention counts (`daily`, `weekly`, `monthly`, `yearly`) applied during forget. |
+| `sources[]` | Mounted folder sources to back up. Each source has an `id`, one or more `paths` (typically under `/userdata`), optional `excludes`, one or more `destinationIds[]`, and optional per-source Healthchecks.io backup URLs. |
 
-Environment placeholders such as `${TAILSAFE_BACKUP_HTTP_PASSWORD}` and `${RESTIC_REPOSITORY_PASSWORD}` in the site file are expanded by the configurator from `.env` at generation time. Values inserted into repository URIs are URL-encoded so passwords containing reserved characters (for example `@`, `:`, or `/`) produce valid `rest:http://...` addresses. The repository password field itself is expanded without URL encoding.
+Environment placeholders such as `${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}` and `${RESTIC_REPOSITORY_PASSWORD}` in the site file are expanded by the configurator from the full `.env` at generation time. Values inserted into repository URIs are URL-encoded so passwords containing reserved characters (for example `@`, `:`, or `/`) produce valid `rest:http://...` addresses. Repository passwords and htpasswd material are expanded without URL encoding.
+
+For `backupUri` and `maintenanceUri`, the URI path segment should match the identifier the receiving site uses for the sending site. In the one-friend examples from `docs/setup-guide.md`, home-a pushes to `/home-a` on friend-b's endpoint, and friend-b pushes to `/friend-b` on home-a's endpoint.
+
+### Legacy migration
+
+The old single-remote schema is still accepted during the migration window:
+
+- `remote` is treated as a one-entry `outboundRemotes[]`
+- top-level `healthchecks` become that remote's maintenance hooks
+- sources without `destinationIds[]` default to the single outbound remote
+- inbound runtime generation falls back to one endpoint trio that uses the legacy `TS_ENDPOINT_*` and `TAILSAFE_*HTTP_*` variables
+
+New deployments should use `outboundRemotes[]` and `inboundPeers[]` directly.
 
 ### Preflight checks
 
@@ -87,12 +112,22 @@ It does **not** yet validate outbound Tailscale health or remote endpoint reacha
 
 ### Regenerating generated assets
 
-The `configurator` service is a **one-shot** job with `restart: "no"`. It runs once, writes files under `${BACKREST_DATA_ROOT}/generated` (including `backrest-config.json` and htpasswd files), and exits. Restarting Backrest or the rest-server containers does **not** regenerate those files.
+The `configurator` service is a **one-shot** job with `restart: "no"`. It runs once, writes files under `${BACKREST_DATA_ROOT}/generated`, and exits. The generated set now includes:
 
-After editing `.env` or `config/site.json`, recreate or rerun the configurator explicitly, for example:
+- `backrest-config.json`
+- `compose.endpoints.yaml`
+- one backup and one maintenance htpasswd file per inbound peer
+
+Restarting Backrest or the generated endpoint services does **not** regenerate those files.
+
+After editing `.env` or `config/site.json`, rerun the configurator explicitly, then start the stack with the generated compose fragment. Use the real absolute host path for your `BACKREST_DATA_ROOT`, for example:
 
 ```sh
-docker compose up configurator --force-recreate
+docker compose --env-file .env -f deploy/compose.yaml up configurator --force-recreate
+docker compose --env-file .env \
+  -f deploy/compose.yaml \
+  -f /volume1/tailsafe/backrest/generated/compose.endpoints.yaml \
+  up -d
 ```
 
-Wait for the configurator container to exit successfully, then restart dependent services if they are already running. Do not expect a normal `docker compose restart` of the long-lived services alone to pick up configuration changes.
+Do not expect a normal `docker compose restart` of the long-lived services alone to pick up configuration changes.

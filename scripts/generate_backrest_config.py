@@ -1,26 +1,11 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 import shlex
 import sys
 import uuid
-from urllib.parse import quote
 
-ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
-
-
-def expand_env(value: str, *, url_encode: bool = False) -> str:
-    def replace(match: re.Match[str]) -> str:
-        key = match.group(1)
-        if key not in os.environ:
-            raise KeyError(f"missing environment variable: {key}")
-        env_value = os.environ[key]
-        if url_encode:
-            return quote(env_value, safe="")
-        return env_value
-
-    return ENV_PATTERN.sub(replace, value)
+from tailsafe_site import expand_env, load_site, outbound_remotes, plan_id, source_destination_ids
 
 
 def schedule(cron: str) -> dict:
@@ -102,9 +87,29 @@ def make_repo(
     }
 
 
-def make_plan(remote_backup_repo: str, source: dict, backup_cron: str, base_dir: str) -> dict:
+def make_plan(
+    plan_name: str,
+    remote_backup_repo: str,
+    source: dict,
+    backup_cron: str,
+    base_dir: str,
+) -> dict:
+    hooks = [preflight_hook(source["id"], source["paths"], base_dir)]
+    backup_url = source.get("healthchecks", {}).get("backup")
+    if backup_url:
+        hooks.append(
+            healthcheck_hook(
+                [
+                    "CONDITION_SNAPSHOT_START",
+                    "CONDITION_SNAPSHOT_SUCCESS",
+                    "CONDITION_SNAPSHOT_ERROR",
+                ],
+                backup_url,
+            )
+        )
+
     return {
-        "id": source["id"],
+        "id": plan_name,
         "repo": remote_backup_repo,
         "paths": source["paths"],
         "excludes": source.get("excludes", []),
@@ -113,45 +118,96 @@ def make_plan(remote_backup_repo: str, source: dict, backup_cron: str, base_dir:
         "retention": {"policyKeepAll": True},
         "backup_flags": [],
         "skipIfUnchanged": True,
-        "hooks": [
-            preflight_hook(source["id"], source["paths"], base_dir),
-            healthcheck_hook(
-                [
-                    "CONDITION_SNAPSHOT_START",
-                    "CONDITION_SNAPSHOT_SUCCESS",
-                    "CONDITION_SNAPSHOT_ERROR",
-                ],
-                source["healthchecks"]["backup"],
-            ),
-        ],
+        "hooks": hooks,
     }
 
 
 def main(input_path: str, output_path: str) -> None:
-    with open(input_path, "r", encoding="utf-8") as handle:
-        site = json.load(handle)
-
-    remote_id = site["remote"]["id"]
+    site = load_site(input_path)
+    remotes = outbound_remotes(site)
     defaults = site["defaults"]
-    retention = defaults["retention"]
-    backup_repo_id = f"{remote_id}-backup"
-    maintenance_repo_id = f"{remote_id}-maintenance"
     backrest_generated_dir = generated_dir()
+    remote_backup_repo_ids: dict[str, str] = {}
+    repos: list[dict] = []
 
-    maintenance_hooks = [
-        healthcheck_hook(
-            ["CONDITION_CHECK_START", "CONDITION_CHECK_SUCCESS", "CONDITION_CHECK_ERROR"],
-            site["healthchecks"]["check"],
-        ),
-        healthcheck_hook(
-            ["CONDITION_FORGET_START", "CONDITION_FORGET_SUCCESS", "CONDITION_FORGET_ERROR"],
-            site["healthchecks"]["forget"],
-        ),
-        healthcheck_hook(
-            ["CONDITION_PRUNE_START", "CONDITION_PRUNE_SUCCESS", "CONDITION_PRUNE_ERROR"],
-            site["healthchecks"]["prune"],
-        ),
-    ]
+    for remote in remotes:
+        remote_id = remote["id"]
+        retention = remote.get("retention", defaults["retention"])
+        check_cron = remote.get("checkCron", defaults["checkCron"])
+        forget_cron = remote.get("forgetCron", defaults["forgetCron"])
+        prune_cron = remote.get("pruneCron", defaults["pruneCron"])
+        backup_repo_id = f"{remote_id}-backup"
+        maintenance_repo_id = f"{remote_id}-maintenance"
+        remote_backup_repo_ids[remote_id] = backup_repo_id
+
+        maintenance_hooks = [
+            healthcheck_hook(
+                [
+                    "CONDITION_CHECK_START",
+                    "CONDITION_CHECK_SUCCESS",
+                    "CONDITION_CHECK_ERROR",
+                ],
+                remote["healthchecks"]["check"],
+            ),
+            healthcheck_hook(
+                [
+                    "CONDITION_FORGET_START",
+                    "CONDITION_FORGET_SUCCESS",
+                    "CONDITION_FORGET_ERROR",
+                ],
+                remote["healthchecks"]["forget"],
+            ),
+            healthcheck_hook(
+                [
+                    "CONDITION_PRUNE_START",
+                    "CONDITION_PRUNE_SUCCESS",
+                    "CONDITION_PRUNE_ERROR",
+                ],
+                remote["healthchecks"]["prune"],
+            ),
+        ]
+
+        repos.extend(
+            [
+                make_repo(
+                    backup_repo_id,
+                    remote["backupUri"],
+                    remote["repositoryPassword"],
+                    retention,
+                    check_cron,
+                    forget_cron,
+                    prune_cron,
+                    [],
+                    maintenance=False,
+                ),
+                make_repo(
+                    maintenance_repo_id,
+                    remote["maintenanceUri"],
+                    remote["repositoryPassword"],
+                    retention,
+                    check_cron,
+                    forget_cron,
+                    prune_cron,
+                    maintenance_hooks,
+                    maintenance=True,
+                ),
+            ]
+        )
+
+    plans: list[dict] = []
+    remote_ids = [remote["id"] for remote in remotes]
+    for source in site["sources"]:
+        destinations = source_destination_ids(source, remote_ids)
+        for destination in destinations:
+            plans.append(
+                make_plan(
+                    plan_id(source["id"], destinations, destination),
+                    remote_backup_repo_ids[destination],
+                    source,
+                    defaults["backupCron"],
+                    backrest_generated_dir,
+                )
+            )
 
     config = {
         "modno": 1,
@@ -161,39 +217,8 @@ def main(input_path: str, output_path: str) -> None:
             "disabled": site["auth"].get("disabled", False),
             "users": site["auth"].get("users", []),
         },
-        "repos": [
-            make_repo(
-                backup_repo_id,
-                site["remote"]["backupUri"],
-                site["remote"]["repositoryPassword"],
-                retention,
-                defaults["checkCron"],
-                defaults["forgetCron"],
-                defaults["pruneCron"],
-                [],
-                maintenance=False,
-            ),
-            make_repo(
-                maintenance_repo_id,
-                site["remote"]["maintenanceUri"],
-                site["remote"]["repositoryPassword"],
-                retention,
-                defaults["checkCron"],
-                defaults["forgetCron"],
-                defaults["pruneCron"],
-                maintenance_hooks,
-                maintenance=True,
-            ),
-        ],
-        "plans": [
-            make_plan(
-                backup_repo_id,
-                source,
-                defaults["backupCron"],
-                backrest_generated_dir,
-            )
-            for source in site["sources"]
-        ],
+        "repos": repos,
+        "plans": plans,
     }
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

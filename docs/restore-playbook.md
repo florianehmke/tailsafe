@@ -31,11 +31,13 @@ If verification fails, discard the temporary restore and try an earlier snapshot
 
 ## Maintenance endpoint failure
 
-Maintenance jobs (`check`, `forget`, `prune`) use the maintenance URI on port `8001`, not the append-only backup endpoint on port `8000`. If maintenance actions fail in Backrest or Healthchecks.io reports errors:
+Maintenance jobs (`check`, `forget`, `prune`) use the maintenance URI on port `8001`, not the append-only backup endpoint on port `8000`. In the multi-site model, each inbound peer has its own maintenance service and its own htpasswd file.
 
-1. Confirm `rest-server-maintenance` is running on the endpoint site (`docker compose ps` or your Synology container UI).
-2. Confirm the maintenance htpasswd file exists in the generated directory (`rest-server-maint.htpasswd` under `${BACKREST_DATA_ROOT}/generated`). If htpasswd or other generated files are missing, recreate the configurator service explicitly—for example `docker compose up configurator --force-recreate`—and wait for it to exit successfully before retrying maintenance.
-3. Confirm `tailscale-endpoint` is connected and reachable from the outbound site.
+If maintenance actions fail in Backrest or Healthchecks.io reports errors for a specific remote, first identify which peer or remote id is affected, then verify that peer-specific trio:
+
+1. Confirm `rest-server-maintenance-<peer-id>` is running on the endpoint site (`docker compose ps` with the generated compose fragment, or your Synology container UI).
+2. Confirm the peer-specific maintenance htpasswd file exists in the generated directory (`rest-server-maint-<peer-id>.htpasswd` under `${BACKREST_DATA_ROOT}/generated`). If htpasswd or other generated files are missing, recreate the configurator service explicitly, wait for it to exit successfully, then restart the stack with the regenerated `compose.endpoints.yaml`.
+3. Confirm `tailscale-endpoint-<peer-id>` is connected and reachable from the outbound site.
 4. Re-run **`check`** successfully before running **`forget`** or **`prune`**. Do not prune a repository that has not passed a recent check.
 
-Append-only backup traffic can continue on port `8000` even when maintenance on `8001` is misconfigured, but retention cleanup will not run until maintenance is healthy again.
+Append-only backup traffic for that peer can continue on port `8000` even when maintenance on `8001` is misconfigured, but retention cleanup will not run until maintenance is healthy again.
