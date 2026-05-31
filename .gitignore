@@ -2,6 +2,8 @@
 .env
 .env.local
 .tmp/
+__pycache__/
+*.pyc
 config/site.json
 deploy/compose.yaml
 deploy/compose.override.yaml
