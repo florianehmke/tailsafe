@@ -202,7 +202,7 @@ Ask friend-b to send you the mirror set for **their** site:
 Example one-friend `.env`:
 
 ```dotenv
-TAILSAFE_VERSION=0.1.0
+TAILSAFE_VERSION=0.2.2
 TAILSAFE_IMAGE_NAMESPACE=ghcr.io/pixeljonas/tailsafe
 TZ=Europe/Berlin
 
@@ -406,7 +406,7 @@ Friend-b receives from you:
 Example friend-side `.env`:
 
 ```dotenv
-TAILSAFE_VERSION=0.1.0
+TAILSAFE_VERSION=0.2.2
 TAILSAFE_IMAGE_NAMESPACE=ghcr.io/pixeljonas/tailsafe
 TZ=Europe/Berlin
 
