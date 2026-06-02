@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import shlex
 import sys
-import uuid
 
 from tailsafe_site import expand_env, load_site, outbound_remotes, plan_id, source_destination_ids
+
+VALID_GUID_PATTERN = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 def schedule(cron: str) -> dict:
@@ -39,6 +41,27 @@ def generated_dir() -> str:
     return os.environ.get("TAILSAFE_BACKREST_GENERATED_DIR", "/generated")
 
 
+def is_valid_guid(value: str) -> bool:
+    return bool(VALID_GUID_PATTERN.match(value))
+
+
+def load_existing_repo_guids(output_path: str) -> dict[str, str]:
+    if not os.path.exists(output_path):
+        return {}
+    try:
+        with open(output_path, "r", encoding="utf-8") as handle:
+            existing = json.load(handle)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    guids: dict[str, str] = {}
+    for repo in existing.get("repos", []):
+        repo_id = repo.get("id")
+        guid = repo.get("guid")
+        if repo_id and isinstance(guid, str) and is_valid_guid(guid):
+            guids[repo_id] = guid
+    return guids
+
+
 def preflight_hook(source_id: str, paths: list[str], base_dir: str) -> dict:
     quoted_paths = " ".join(shlex.quote(path) for path in paths)
     return {
@@ -60,16 +83,15 @@ def make_repo(
     prune_cron: str,
     hooks: list[dict],
     maintenance: bool,
+    existing_guid: str | None = None,
 ) -> dict:
-    return {
+    repo = {
         "id": repo_id,
-        "guid": str(uuid.uuid5(uuid.NAMESPACE_DNS, repo_id)),
         "uri": expand_env(uri, url_encode=True),
         "password": expand_env(password),
         "env": [],
         "flags": [],
         "autoUnlock": False,
-        "autoInitialize": True,
         "commandPrefix": {"ioNice": "IO_BEST_EFFORT_LOW", "cpuNice": "CPU_LOW"},
         "hooks": hooks,
         "checkPolicy": {
@@ -85,6 +107,12 @@ def make_repo(
             "retention": retention_policy(retention),
         },
     }
+    if existing_guid:
+        repo["guid"] = existing_guid
+        repo["autoInitialize"] = False
+    else:
+        repo["autoInitialize"] = True
+    return repo
 
 
 def make_plan(
@@ -127,6 +155,7 @@ def main(input_path: str, output_path: str) -> None:
     remotes = outbound_remotes(site)
     defaults = site["defaults"]
     backrest_generated_dir = generated_dir()
+    existing_guids = load_existing_repo_guids(output_path)
     remote_backup_repo_ids: dict[str, str] = {}
     repos: list[dict] = []
 
@@ -179,6 +208,7 @@ def main(input_path: str, output_path: str) -> None:
                     prune_cron,
                     [],
                     maintenance=False,
+                    existing_guid=existing_guids.get(backup_repo_id),
                 ),
                 make_repo(
                     maintenance_repo_id,
@@ -190,6 +220,7 @@ def main(input_path: str, output_path: str) -> None:
                     prune_cron,
                     maintenance_hooks,
                     maintenance=True,
+                    existing_guid=existing_guids.get(maintenance_repo_id),
                 ),
             ]
         )

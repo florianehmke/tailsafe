@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import uuid
 
 
 def multisite_site_config() -> dict:
@@ -152,6 +153,46 @@ def legacy_site_config() -> dict:
 
 class GenerateBackrestConfigTest(unittest.TestCase):
     maxDiff = None
+
+    def multisite_env(self) -> dict[str, str]:
+        return {
+            "TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B": "remote-backup-password-b",
+            "TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B": "remote-maint-password-b",
+            "TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_C": "remote-backup-password-c",
+            "TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_C": "remote-maint-password-c",
+            "TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_FRIEND_B": "local-backup-password-b",
+            "TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_FRIEND_B": "local-maint-password-b",
+            "TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_FRIEND_C": "local-backup-password-c",
+            "TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_FRIEND_C": "local-maint-password-c",
+            "RESTIC_REPOSITORY_PASSWORD": "repo-password",
+        }
+
+    def run_generator_to(
+        self,
+        output_path: str,
+        site_config: dict | None = None,
+        env: dict[str, str] | None = None,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "site.json")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                json.dump(site_config or multisite_site_config(), handle)
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/generate_backrest_config.py",
+                    input_path,
+                    output_path,
+                ],
+                check=True,
+                env=os.environ | (env or self.multisite_env()),
+            )
+
+    def load_repos(self, output_path: str) -> dict[str, dict]:
+        with open(output_path, "r", encoding="utf-8") as handle:
+            config = json.load(handle)
+        return {repo["id"]: repo for repo in config["repos"]}
 
     def run_generator(self, site_config: dict, env: dict[str, str]) -> dict:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -360,3 +401,85 @@ class GenerateBackrestConfigTest(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("must not define both", result.stderr)
+
+    def test_first_render_omits_guid_for_generated_repos(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "config.json")
+            self.run_generator_to(output_path)
+            repos_by_id = self.load_repos(output_path)
+
+            for repo_id in (
+                "friend-b-backup",
+                "friend-b-maintenance",
+                "friend-c-backup",
+                "friend-c-maintenance",
+            ):
+                with self.subTest(repo_id=repo_id):
+                    repo = repos_by_id[repo_id]
+                    self.assertNotIn("guid", repo)
+                    self.assertTrue(repo["autoInitialize"])
+
+    def test_rerender_preserves_valid_existing_guid(self) -> None:
+        valid_backup_guid = "a" * 64
+        valid_maint_guid = "b" * 64
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "config.json")
+            self.run_generator_to(output_path)
+
+            with open(output_path, "r", encoding="utf-8") as handle:
+                config = json.load(handle)
+
+            for repo in config["repos"]:
+                if repo["id"] == "friend-b-backup":
+                    repo["guid"] = valid_backup_guid
+                elif repo["id"] == "friend-b-maintenance":
+                    repo["guid"] = valid_maint_guid
+
+            with open(output_path, "w", encoding="utf-8") as handle:
+                json.dump(config, handle, indent=2)
+                handle.write("\n")
+
+            self.run_generator_to(output_path)
+            repos_by_id = self.load_repos(output_path)
+
+            self.assertEqual(repos_by_id["friend-b-backup"]["guid"], valid_backup_guid)
+            self.assertFalse(repos_by_id["friend-b-backup"]["autoInitialize"])
+            self.assertEqual(repos_by_id["friend-b-maintenance"]["guid"], valid_maint_guid)
+            self.assertFalse(repos_by_id["friend-b-maintenance"]["autoInitialize"])
+            self.assertNotIn("guid", repos_by_id["friend-c-backup"])
+            self.assertTrue(repos_by_id["friend-c-backup"]["autoInitialize"])
+
+    def test_rerender_ignores_invalid_uuid_style_guid(self) -> None:
+        invalid_guid = str(uuid.uuid5(uuid.NAMESPACE_DNS, "friend-b-backup"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = os.path.join(tmpdir, "config.json")
+            self.run_generator_to(output_path)
+
+            with open(output_path, "r", encoding="utf-8") as handle:
+                config = json.load(handle)
+
+            for repo in config["repos"]:
+                if repo["id"] == "friend-b-backup":
+                    repo["guid"] = invalid_guid
+                elif repo["id"] == "friend-b-maintenance":
+                    repo["guid"] = str(uuid.uuid5(uuid.NAMESPACE_DNS, "friend-b-maintenance"))
+
+            with open(output_path, "w", encoding="utf-8") as handle:
+                json.dump(config, handle, indent=2)
+                handle.write("\n")
+
+            self.run_generator_to(output_path)
+            repos_by_id = self.load_repos(output_path)
+
+            for repo_id in (
+                "friend-b-backup",
+                "friend-b-maintenance",
+                "friend-c-backup",
+                "friend-c-maintenance",
+            ):
+                with self.subTest(repo_id=repo_id):
+                    repo = repos_by_id[repo_id]
+                    self.assertNotIn("guid", repo)
+                    self.assertTrue(repo["autoInitialize"])
