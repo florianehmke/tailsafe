@@ -16,6 +16,8 @@ Repository URIs in the example stack are plain `rest:http://...` over Tailscale,
 
 The example stack uses **userspace Tailscale** networking (no `NET_ADMIN` capability or `/dev/net/tun` device in Compose). Tailscale runs inside the container without host TUN setup.
 
+In userspace mode there is no host-style `tailscale0` interface that sibling containers can share transparently. Processes that share the outbound container's network namespace (such as Backrest) do not automatically route through Tailscale the way they would on a host with a TUN device.
+
 ## Base stack plus generated endpoints
 
 `deploy/compose.example.yaml` now defines only the base services:
@@ -62,9 +64,10 @@ The **outbound** role on your site initiates backup and maintenance traffic towa
 - Container: `tailscale-outbound`
 - Auth key: `TS_OUTBOUND_AUTHKEY` in `.env`
 - Hostname: `TS_OUTBOUND_HOSTNAME` in `.env`
+- Local proxy: `TS_OUTBOUND_PROXY_LISTEN` (default `localhost:1055` in `deploy/compose.example.yaml`)
 - Backrest shares this container's network namespace via `network_mode: service:tailscale-outbound`
 
-Backrest uses the outbound Tailscale interface to reach the remote endpoint hostnames defined in `outboundRemotes[]`. It does not serve repository traffic to other sites through this role.
+`tailscale-outbound` starts a localhost HTTP proxy for mesh egress. Backrest reaches remote endpoint hostnames from `outboundRemotes[]` through `HTTP_PROXY` / `HTTPS_PROXY` pointed at that listener (for example `http://127.0.0.1:1055`). Healthchecks pings stay on `NO_PROXY` so they do not traverse the proxy. Backrest does not serve repository traffic to other sites through this role.
 
 ## Inbound endpoint trios
 

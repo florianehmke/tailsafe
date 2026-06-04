@@ -18,6 +18,7 @@ services:
       TS_AUTHKEY: ${TS_OUTBOUND_AUTHKEY}
       TS_HOSTNAME: ${TS_OUTBOUND_HOSTNAME}
       TS_STATE_DIR: /var/lib/tailscale
+      TS_OUTBOUND_PROXY_LISTEN: localhost:1055
     volumes:
       - ${TAILSAFE_STATE_ROOT}/outbound:/var/lib/tailscale
     ports:
@@ -40,6 +41,12 @@ services:
       TMPDIR: /tmp
       TZ: ${TZ}
       RESTIC_REPOSITORY_PASSWORD: ${RESTIC_REPOSITORY_PASSWORD}
+      HTTP_PROXY: http://127.0.0.1:1055
+      HTTPS_PROXY: http://127.0.0.1:1055
+      http_proxy: http://127.0.0.1:1055
+      https_proxy: http://127.0.0.1:1055
+      NO_PROXY: 127.0.0.1,localhost,hc-ping.com
+      no_proxy: 127.0.0.1,localhost,hc-ping.com
     volumes:
       - ${BACKREST_DATA_ROOT}/generated:/generated
       - ${BACKREST_DATA_ROOT}/data:/data

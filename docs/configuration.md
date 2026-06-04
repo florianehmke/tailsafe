@@ -12,6 +12,8 @@ These files define how a live TailSafe deployment behaves. They are not committe
 
 Your site-local **base** Compose file. Start from `deploy/compose.example.yaml` and adjust image tags, volume paths, and local ports for your environment. This base file wires together the configurator, the outbound Tailscale node, and Backrest.
 
+The base file also carries outbound runtime wiring that changes between releases (for example the userspace proxy listener and Backrest proxy environment variables). Existing deployments keep their own `deploy/compose.yaml`; when upstream changes that wiring, refresh your local copy from `deploy/compose.example.yaml` and merge your paths or ports. Bumping `TAILSAFE_VERSION` in `.env` alone is not enough, and rerunning the configurator or regenerating `${BACKREST_DATA_ROOT}/generated` alone is not enough either, if the base compose file is stale.
+
 The inbound endpoint services are now generated dynamically into `${BACKREST_DATA_ROOT}/generated/compose.endpoints.yaml` based on `config/site.json`.
 
 ### `.env`
@@ -131,3 +133,7 @@ docker compose --env-file .env \
 ```
 
 Do not expect a normal `docker compose restart` of the long-lived services alone to pick up configuration changes.
+
+### Outbound runtime (userspace proxy)
+
+On each site, `tailscale-outbound` runs userspace Tailscale and exposes a localhost HTTP proxy (`TS_OUTBOUND_PROXY_LISTEN`). Backrest uses `network_mode: service:tailscale-outbound` and proxy environment variables so backup and maintenance traffic to remote `rest:http://...` hostnames in `outboundRemotes[]` egresses over the mesh. `NO_PROXY` lists `hc-ping.com` (and local addresses) so Healthchecks pings use the normal internet path and do not go through the Tailscale proxy. Inbound endpoint trios are unchanged: friends still reach your rest-server ports on their peer-specific endpoint hostnames.
