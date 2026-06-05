@@ -2,7 +2,7 @@
 
 TailSafe separates published examples from the files you actually run at each site. Copy the example files, fill in secrets locally, and keep production copies out of version control.
 
-If you are doing your first real rollout with a friend, follow the step-by-step [Setup guide](setup-guide.md) first. This page is the field reference and lifecycle reference for the generated files.
+If you are doing a first install, follow [Agent-assisted install](agent-install.md) first. This page is the field reference and lifecycle reference for the generated files.
 
 ## User-owned files
 
@@ -18,11 +18,11 @@ The inbound endpoint services are now generated dynamically into `${BACKREST_DAT
 
 ### `.env`
 
-Environment variables consumed by Compose and also passed through to the configurator. Start from `env.example`. It holds Tailscale auth keys, per-remote and per-peer HTTP passwords, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), and the path to your site file (`SITE_CONFIG_PATH`).
+Environment variables consumed by Compose and also passed through to the configurator. For a first pair, start from `env.one-friend.example`; use `env.example` for the advanced multi-friend reference layout. It holds Tailscale auth keys, per-remote and per-peer HTTP passwords, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), and the path to your site file (`SITE_CONFIG_PATH`).
 
 ### `config/site.json`
 
-The site configuration consumed by the configurator to generate `backrest-config.json`, the inbound endpoint compose fragment, peer-specific htpasswd files, and related runtime material. Start from `config/site.example.json`. Each site keeps its own copy with friend-specific remotes, inbound peers, schedules, sources, and Healthchecks.io URLs.
+The site configuration consumed by the configurator to generate `backrest-config.json`, the inbound endpoint compose fragment, peer-specific htpasswd files, and related runtime material. For a first pair, start from `config/site.one-friend.example.json`; use `config/site.example.json` for the advanced multi-friend reference layout. Each site keeps its own copy with friend-specific remotes, inbound peers, schedules, sources, and Healthchecks.io URLs.
 
 ## Required secrets
 
@@ -58,6 +58,29 @@ For every friend relationship in the new model, remember that the endpoint-key f
 - you issue one endpoint key for your friend to join **your** tailnet
 - your friend issues one endpoint key for you to join **their** tailnet
 
+## Local-only vs exchanged values
+
+| Category | Values |
+| --- | --- |
+| Local only | `TS_OUTBOUND_AUTHKEY`, host path roots, local bind port |
+| Send to friend | endpoint auth key you issued for them, endpoint hostname they should target, inbound HTTP users/passwords |
+| Receive from friend | endpoint auth key they issued for you, remote endpoint hostname/FQDN, remote HTTP users/passwords |
+| Store securely | every auth key, HTTP password, `RESTIC_REPOSITORY_PASSWORD`, Backrest UI credential |
+
+### Backrest UI auth lifecycle
+
+- localhost-only UI can tolerate `auth.disabled: true`
+- LAN exposure should enable Backrest auth
+- Backrest UI passwords are not recoverable from the stored hash
+- password reset uses Backrest's own password-hash format, not a raw Apache htpasswd bcrypt string
+
+### First-install vs upgrade
+
+- greenfield installs should follow [Agent-assisted install](agent-install.md); use `env.one-friend.example` and `config/site.one-friend.example.json` as the starting templates
+- existing deployments must compare their live `deploy/compose.yaml` with `deploy/compose.example.yaml` when release wiring changes
+- rerunning the configurator alone does not pick up stale base compose wiring
+- version pin bumps and multi-site migration both require an explicit regeneration and bring-up pass
+
 ## HTTP credential coordination
 
 The multi-site model deliberately separates the two directions:
@@ -69,6 +92,8 @@ That means you no longer need to reuse one shared password variable for both dir
 
 - you create and share the inbound credentials they should use against your stack
 - they create and share the inbound credentials you should embed in your outbound URIs to reach theirs
+
+The username inside each outbound `backupUri` or `maintenanceUri` must exactly match the remote site's `inboundPeers[].backup.user` or `maintenance.user` value for your instance id. Only the password travels through `.env`; the username lives in `config/site.json`.
 
 If either side uses the wrong pair, backups fail with HTTP authentication errors even when Tailscale connectivity is healthy.
 
@@ -90,7 +115,7 @@ If either side uses the wrong pair, backups fail with HTTP authentication errors
 
 Environment placeholders such as `${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}` and `${RESTIC_REPOSITORY_PASSWORD}` in the site file are expanded by the configurator from the full `.env` at generation time. Values inserted into repository URIs are URL-encoded so passwords containing reserved characters (for example `@`, `:`, or `/`) produce valid `rest:http://...` addresses. Repository passwords and htpasswd material are expanded without URL encoding.
 
-For `backupUri` and `maintenanceUri`, the URI path segment should match the identifier the receiving site uses for the sending site. In the one-friend examples from `docs/setup-guide.md`, home-a pushes to `/home-a` on friend-b's endpoint, and friend-b pushes to `/friend-b` on home-a's endpoint.
+For `backupUri` and `maintenanceUri`, the URI path segment should match the identifier the receiving site uses for the sending site. In the one-friend examples (`config/site.one-friend.example.json` and [Agent-assisted install](agent-install.md)), home-a pushes to `/home-a` on friend-b's endpoint, and friend-b pushes to `/friend-b` on home-a's endpoint.
 
 ### Legacy migration
 

@@ -1,0 +1,65 @@
+{
+  "instance": "home-a",
+  "auth": {
+    "disabled": true
+  },
+  "outboundRemotes": [
+    {
+      "id": "friend-b",
+      "endpointHostname": "tailsafe-friend-b-endpoint.ts.net",
+      "backupUri": "rest:http://backup-friend-b:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8000/home-a",
+      "maintenanceUri": "rest:http://maint-friend-b:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8001/home-a",
+      "repositoryPassword": "${RESTIC_REPOSITORY_PASSWORD}",
+      "healthchecks": {
+        "check": "https://hc-ping.com/friend-b-check-uuid",
+        "forget": "https://hc-ping.com/friend-b-forget-uuid",
+        "prune": "https://hc-ping.com/friend-b-prune-uuid"
+      }
+    }
+  ],
+  "inboundPeers": [
+    {
+      "id": "friend-b",
+      "endpointAuthKey": "${TS_ENDPOINT_AUTHKEY_FRIEND_B}",
+      "endpointHostname": "${TS_ENDPOINT_HOSTNAME_FRIEND_B}",
+      "repositorySubdir": "friend-b",
+      "backup": {
+        "user": "backup-home-a",
+        "password": "${TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_FRIEND_B}"
+      },
+      "maintenance": {
+        "user": "maint-home-a",
+        "password": "${TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_FRIEND_B}"
+      }
+    }
+  ],
+  "defaults": {
+    "backupCron": "15 2 * * *",
+    "checkCron": "20 3 * * 0",
+    "forgetCron": "35 3 * * 0",
+    "pruneCron": "50 3 * * 0",
+    "retention": {
+      "daily": 30,
+      "weekly": 8,
+      "monthly": 12,
+      "yearly": 2
+    }
+  },
+  "sources": [
+    {
+      "id": "photos",
+      "paths": [
+        "/userdata/photos"
+      ],
+      "excludes": [
+        "**/.DS_Store"
+      ],
+      "destinationIds": [
+        "friend-b"
+      ],
+      "healthchecks": {
+        "backup": "https://hc-ping.com/photos-uuid"
+      }
+    }
+  ]
+}

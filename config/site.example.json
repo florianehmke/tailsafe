@@ -1,14 +1,14 @@
 {
-  "instance": "tailsafe-site-a",
+  "instance": "home-a",
   "auth": {
     "disabled": true
   },
   "outboundRemotes": [
     {
       "id": "friend-b",
-      "endpointHostname": "friend-b-endpoint.ts.net",
-      "backupUri": "rest:http://backup-b:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}@friend-b-endpoint.ts.net:8000/tailsafe-site-a",
-      "maintenanceUri": "rest:http://maint-b:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B}@friend-b-endpoint.ts.net:8001/tailsafe-site-a",
+      "endpointHostname": "tailsafe-friend-b-endpoint.ts.net",
+      "backupUri": "rest:http://backup-friend-b:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8000/home-a",
+      "maintenanceUri": "rest:http://maint-friend-b:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8001/home-a",
       "repositoryPassword": "${RESTIC_REPOSITORY_PASSWORD}",
       "healthchecks": {
         "check": "https://hc-ping.com/friend-b-check-uuid",
@@ -18,9 +18,9 @@
     },
     {
       "id": "friend-c",
-      "endpointHostname": "friend-c-endpoint.ts.net",
-      "backupUri": "rest:http://backup-c:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_C}@friend-c-endpoint.ts.net:8000/tailsafe-site-a",
-      "maintenanceUri": "rest:http://maint-c:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_C}@friend-c-endpoint.ts.net:8001/tailsafe-site-a",
+      "endpointHostname": "tailsafe-friend-c-endpoint.ts.net",
+      "backupUri": "rest:http://backup-friend-c:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_C}@tailsafe-friend-c-endpoint.ts.net:8000/home-a",
+      "maintenanceUri": "rest:http://maint-friend-c:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_C}@tailsafe-friend-c-endpoint.ts.net:8001/home-a",
       "repositoryPassword": "${RESTIC_REPOSITORY_PASSWORD}",
       "checkCron": "10 4 * * 1",
       "forgetCron": "20 4 * * 1",
@@ -45,11 +45,11 @@
       "endpointHostname": "${TS_ENDPOINT_HOSTNAME_FRIEND_B}",
       "repositorySubdir": "friend-b",
       "backup": {
-        "user": "backup-b",
+        "user": "backup-home-a-friend-b",
         "password": "${TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_FRIEND_B}"
       },
       "maintenance": {
-        "user": "maint-b",
+        "user": "maint-home-a-friend-b",
         "password": "${TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_FRIEND_B}"
       }
     },
@@ -59,11 +59,11 @@
       "endpointHostname": "${TS_ENDPOINT_HOSTNAME_FRIEND_C}",
       "repositorySubdir": "friend-c",
       "backup": {
-        "user": "backup-c",
+        "user": "backup-home-a-friend-c",
         "password": "${TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_FRIEND_C}"
       },
       "maintenance": {
-        "user": "maint-c",
+        "user": "maint-home-a-friend-c",
         "password": "${TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_FRIEND_C}"
       }
     }
@@ -83,18 +83,29 @@
   "sources": [
     {
       "id": "photos",
-      "paths": ["/userdata/photos"],
-      "excludes": ["**/.DS_Store"],
-      "destinationIds": ["friend-b", "friend-c"],
+      "paths": [
+        "/userdata/photos"
+      ],
+      "excludes": [
+        "**/.DS_Store"
+      ],
+      "destinationIds": [
+        "friend-b",
+        "friend-c"
+      ],
       "healthchecks": {
         "backup": "https://hc-ping.com/photos-uuid"
       }
     },
     {
       "id": "volsync-prod",
-      "paths": ["/userdata/volsync/prod"],
+      "paths": [
+        "/userdata/volsync/prod"
+      ],
       "excludes": [],
-      "destinationIds": ["friend-b"],
+      "destinationIds": [
+        "friend-b"
+      ],
       "healthchecks": {
         "backup": "https://hc-ping.com/volsync-prod-uuid"
       }

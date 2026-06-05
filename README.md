@@ -22,16 +22,18 @@ Only the TailSafe-owned configurator image is UBI-based right now. The Backrest,
 
 `mise run ci` requires [mise](https://mise.jdx.dev/) and Docker with Compose support.
 
-If this is your first real deployment with a friend, start with the step-by-step [Setup guide](docs/setup-guide.md) before using the shorter quickstart below.
+If this is your first real deployment with a friend, start with [Agent-assisted install](docs/agent-install.md).
 
 ## Quickstart
 
-1. Copy the example deployment files to site-local paths:
+This quickstart assumes you already understand the TailSafe model and have exchanged the required friend values.
+
+1. Copy the example deployment files:
 
    ```bash
    cp deploy/compose.example.yaml deploy/compose.yaml
-   cp config/site.example.json config/site.json
-   cp env.example .env
+   cp config/site.one-friend.example.json config/site.json
+   cp env.one-friend.example .env
    ```
 
 2. Edit `.env` and `config/site.json`. The new model separates:
@@ -68,12 +70,13 @@ See [Configuration](docs/configuration.md) for the full `site.json` model and [D
 
 Use `mise run ci` to validate the repository.
 Use `mise run check:release` as the pre-release validation entrypoint before tagging or publishing images.
-Use `deploy/compose.example.yaml` and `config/site.example.json` as the starting point for a site-local deployment.
+For a first pair, start from the one-friend examples in Quickstart. Use `env.example` and `config/site.example.json` when you need the advanced multi-friend reference layout.
 All CI/CD helper scripts live under `.cicd/scripts/`.
 
 ## Documentation
 
-- [Setup guide](docs/setup-guide.md) — one-friend-first rollout steps for your side and the friend's side, with example config and agent checklist
+- [Agent-assisted install](docs/agent-install.md) — primary first-install runbook for agents and first-time operators
+- [Setup guide](docs/setup-guide.md) — one-friend rollout rationale and mirrored your-side / friend-side walkthrough
 - [Configuration](docs/configuration.md) — user-owned files, required secrets, and the `site.json` model
 - [Networking](docs/networking.md) — outbound and endpoint Tailscale roles, rest-server ports, and UI exposure
 - [Restore playbook](docs/restore-playbook.md) — folder restores, VolSync repository recovery, and maintenance troubleshooting
@@ -83,8 +86,8 @@ All CI/CD helper scripts live under `.cicd/scripts/`.
 TailSafe publishes images and examples. You own the real deployment files used at each site:
 
 - `deploy/compose.yaml` — your site-local Compose stack (copy from `deploy/compose.example.yaml`)
-- `.env` — secrets and path configuration (copy from `env.example`)
-- `config/site.json` — schedules, sources, outbound remotes, inbound peers, and Healthchecks.io URLs (copy from `config/site.example.json`)
+- `.env` — secrets and path configuration (copy from `env.one-friend.example` for a first pair, or `env.example` for multi-friend layouts)
+- `config/site.json` — schedules, sources, outbound remotes, inbound peers, and Healthchecks.io URLs (copy from `config/site.one-friend.example.json` for a first pair, or `config/site.example.json` for multi-friend layouts)
 - `${BACKREST_DATA_ROOT}/generated/compose.endpoints.yaml` — generated inbound endpoint services for your configured peers
 
 Keep production copies on the host or in private storage; do not commit them to this repository.

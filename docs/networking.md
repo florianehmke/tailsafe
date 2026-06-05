@@ -1,8 +1,8 @@
 # Networking
 
-TailSafe uses Tailscale to connect friend sites without exposing rest-server ports on the public internet. The deployment model is still **symmetric**, but the inbound side is now **peer-specific**:
+If you are doing a first install, follow [Agent-assisted install](agent-install.md) first. This page focuses on the network model behind the rollout walkthroughs.
 
-For a first deployment walkthrough with concrete example values on both sides, use the [Setup guide](setup-guide.md). This page focuses on the network model behind that walkthrough.
+TailSafe uses Tailscale to connect friend sites without exposing rest-server ports on the public internet. The deployment model is still **symmetric**, but the inbound side is now **peer-specific**:
 
 - one **global outbound** Tailscale role (`tailscale-outbound`) per site
 - one **endpoint trio per inbound peer** (`tailscale-endpoint-<peer>`, `rest-server-backup-<peer>`, `rest-server-maintenance-<peer>`)
@@ -56,6 +56,23 @@ Each site still owns both directions locally, but the auth keys come from differ
 | Endpoint (`tailscale-endpoint-<peer>`) | `TS_ENDPOINT_AUTHKEY_<PEER>` | **That friend** — joins their tailnet so their outbound node can reach your rest-server ports |
 
 Your friends do the same in reverse: they issue their own outbound key locally and use one key from you for each endpoint they host on your behalf.
+
+## Connectivity validation
+
+Healthy first probe expectations when testing a **remote** endpoint from the outbound site (through the userspace proxy path described in [Outbound role](#outbound-role); a host-shell `curl` without that proxy does not follow the outbound routing model):
+
+- `401` on `:8000` or `:8001` means the endpoint is reachable and challenging auth
+- `502` usually means a stale or broken backend attachment
+- timeout or host unreachable means the transport path is still broken
+
+For the full validation ladder and symptom-oriented follow-ups, see [Agent-assisted install](agent-install.md) Phase 6 and Phase 7.
+
+## Long-lived node key guidance
+
+- outbound keys come from the local tailnet admin
+- endpoint keys come from the remote tailnet admin
+- reusable and pre-approved keys are usually preferable for unattended nodes
+- tagged nodes can simplify no-expiry policies where the operator uses tag-based ACLs
 
 ## Outbound role
 

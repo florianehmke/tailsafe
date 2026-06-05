@@ -1,5 +1,8 @@
 # Setup Guide
 
+This guide explains the one-friend rollout model in detail.
+If you are doing a live install, follow [Agent-assisted install](agent-install.md) for the exact order of preparation, file editing, bring-up, and validation.
+
 This guide walks through a first TailSafe rollout between two sites:
 
 - **your side**: the site you are configuring right now
@@ -57,12 +60,12 @@ Read the variable names literally:
 On your side, you can do all of this before you exchange anything:
 
 1. Clone the repo or copy the published files onto your Synology host.
-2. Copy the example files:
+2. Copy the example files (use the one-friend examples for a first pair; `env.example` and `config/site.example.json` are the multi-friend reference):
 
    ```bash
    cp deploy/compose.example.yaml deploy/compose.yaml
-   cp config/site.example.json config/site.json
-   cp env.example .env
+   cp config/site.one-friend.example.json config/site.json
+   cp env.one-friend.example .env
    ```
 
 3. Create the local host directories you want to use for:
@@ -99,6 +102,8 @@ That means:
 
 - **you send to friend-b** the values they need to back up into **your** endpoint
 - **friend-b sends to you** the values you need to back up into **their** endpoint
+
+The username in your outbound `backupUri` or `maintenanceUri` must exactly match the `backup.user` or `maintenance.user` value your friend configured for your site in their `inboundPeers[]` entry.
 
 Important distinction:
 
@@ -249,8 +254,8 @@ Example one-friend `config/site.json`:
     {
       "id": "friend-b",
       "endpointHostname": "tailsafe-friend-b-endpoint.ts.net",
-      "backupUri": "rest:http://backup-home-b:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8000/home-a",
-      "maintenanceUri": "rest:http://maint-home-b:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8001/home-a",
+      "backupUri": "rest:http://backup-friend-b:${TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8000/home-a",
+      "maintenanceUri": "rest:http://maint-friend-b:${TAILSAFE_REMOTE_MAINT_HTTP_PASSWORD_FRIEND_B}@tailsafe-friend-b-endpoint.ts.net:8001/home-a",
       "repositoryPassword": "${RESTIC_REPOSITORY_PASSWORD}",
       "healthchecks": {
         "check": "https://hc-ping.com/home-a-friend-b-check-uuid",
@@ -470,11 +475,11 @@ Example friend-side `config/site.json`:
       "endpointHostname": "${TS_ENDPOINT_HOSTNAME_HOME_A}",
       "repositorySubdir": "home-a",
       "backup": {
-        "user": "backup-home-b",
+        "user": "backup-friend-b",
         "password": "${TAILSAFE_INBOUND_BACKUP_HTTP_PASSWORD_HOME_A}"
       },
       "maintenance": {
-        "user": "maint-home-b",
+        "user": "maint-friend-b",
         "password": "${TAILSAFE_INBOUND_MAINT_HTTP_PASSWORD_HOME_A}"
       }
     }
@@ -577,43 +582,9 @@ After the one-friend rollout works, add another friend by repeating the same pat
 6. rerun the configurator
 7. restart the stack with the regenerated `compose.endpoints.yaml`
 
+Once you have more than one inbound peer, use peer-suffixed endpoint hostnames and inbound usernames as shown in `env.example` and `config/site.example.json` (for example `tailsafe-home-a-endpoint-friend-b` and `backup-home-a-friend-b`) so each friend keeps a distinct listener identity.
+
 ## Agent checklist
 
-If an agent is helping an operator deploy TailSafe, the agent should work through this checklist in order:
-
-1. Confirm which side is being configured right now.
-2. Confirm whether this is the first friend or an additional friend.
-3. Collect:
-   - local instance name
-   - friend id
-   - host paths for Backrest data, repos, state, and mounted sources
-   - source folders to back up
-   - outbound Tailscale auth key for the local tailnet
-   - endpoint auth key issued by the friend
-   - endpoint auth key the local operator must issue to the friend
-   - endpoint hostname the local operator will expose to the friend
-   - endpoint hostname the friend exposes to the local operator
-   - local inbound backup and maintenance credentials to share with the friend
-   - remote backup and maintenance credentials received from the friend
-   - Healthchecks URLs
-4. Pause and confirm the exchange checklist has been completed in both directions before editing files.
-5. Fill in `.env` with the local and exchanged values.
-6. Fill in `config/site.json` so:
-   - `outboundRemotes[]` points at the friend's endpoint
-   - `inboundPeers[]` defines the friend's access into the local site
-   - the outbound URI path segment matches the identifier the friend uses for this local site
-   - `sources[].destinationIds[]` includes the friend id
-7. Run the configurator.
-8. Confirm the generated files exist.
-9. Start Compose with both the base file and the generated endpoint fragment.
-10. Verify Backrest opens and the Tailscale nodes are connected.
-11. Run one manual backup before declaring the rollout complete.
-
-Agent warning:
-
-- do not reuse `TS_OUTBOUND_AUTHKEY` as an endpoint key
-- do not mix the local inbound passwords with the remote outbound passwords
-- do not skip the two-way exchange of endpoint keys, hostnames, and HTTP credentials
-- do not guess the outbound URI path segment; match the identifier the receiver uses for the sender
-- do not point source paths at host paths; use `/userdata/...` inside `config/site.json`
-- do not start the long-lived stack without the generated `compose.endpoints.yaml`
+Use [Agent-assisted install](agent-install.md) as the canonical checklist.
+Come back to this guide when you need the detailed rationale, mirrored examples, or the full one-friend narrative.
