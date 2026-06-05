@@ -61,12 +61,12 @@ TAILSAFE_COMPOSE_ENV_FILE=../.tmp/compose.env \
   -c '
     set -eu
     grep -Eqi "Red Hat Universal Base Image|PLATFORM_ID=\"platform:el|^ID=\"?rhel" /etc/os-release
-    htpasswd -vb /generated/rest-server-backup-friend-b.htpasswd backup-b change-me >/dev/null
-    htpasswd -vb /generated/rest-server-maint-friend-b.htpasswd maint-b change-me >/dev/null
-    htpasswd -vb /generated/rest-server-backup-friend-c.htpasswd backup-c change-me >/dev/null
-    htpasswd -vb /generated/rest-server-maint-friend-c.htpasswd maint-c change-me >/dev/null
-    ! htpasswd -vb /generated/rest-server-backup-friend-b.htpasswd backup-b wrong >/dev/null 2>&1
-    ! htpasswd -vb /generated/rest-server-maint-friend-c.htpasswd maint-c wrong >/dev/null 2>&1
+    htpasswd -vb /generated/rest-server-backup-friend-b.htpasswd backup-home-a-friend-b you-created-this-for-friend-b >/dev/null
+    htpasswd -vb /generated/rest-server-maint-friend-b.htpasswd maint-home-a-friend-b you-created-this-for-friend-b >/dev/null
+    htpasswd -vb /generated/rest-server-backup-friend-c.htpasswd backup-home-a-friend-c you-created-this-for-friend-c >/dev/null
+    htpasswd -vb /generated/rest-server-maint-friend-c.htpasswd maint-home-a-friend-c you-created-this-for-friend-c >/dev/null
+    ! htpasswd -vb /generated/rest-server-backup-friend-b.htpasswd backup-home-a-friend-b wrong >/dev/null 2>&1
+    ! htpasswd -vb /generated/rest-server-maint-friend-c.htpasswd maint-home-a-friend-c wrong >/dev/null 2>&1
   '
 
 "$container_bin" run -d --rm --name tailsafe-rest-auth-test \
@@ -80,8 +80,8 @@ TAILSAFE_COMPOSE_ENV_FILE=../.tmp/compose.env \
 sleep 3
 
 no_auth_status="$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18080/)"
-good_auth_status="$(curl -s -o /dev/null -w "%{http_code}" -u backup-b:change-me http://127.0.0.1:18080/)"
-bad_auth_status="$(curl -s -o /dev/null -w "%{http_code}" -u backup-b:wrong http://127.0.0.1:18080/)"
+good_auth_status="$(curl -s -o /dev/null -w "%{http_code}" -u backup-home-a-friend-b:you-created-this-for-friend-b http://127.0.0.1:18080/)"
+bad_auth_status="$(curl -s -o /dev/null -w "%{http_code}" -u backup-home-a-friend-b:wrong http://127.0.0.1:18080/)"
 
 test "$no_auth_status" = "401"
 test "$good_auth_status" = "405"
