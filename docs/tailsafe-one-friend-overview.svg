@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="860" viewBox="0 0 1400 860" role="img" aria-labelledby="title desc">
+  <title id="title">TailSafe one-friend overview</title>
+  <desc id="desc">Overview diagram of a one-friend TailSafe deployment. Each site has source folders, Backrest with restic, a tailscale-outbound node, and a dedicated inbound endpoint trio for the friend. Encrypted backup traffic crosses the Tailscale mesh to the friend's endpoint and is stored as an encrypted repository.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#2d4b66" />
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 12 6 L 0 12 z" fill="#1d7f5f" />
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .panel { fill: #ffffff; stroke: #cad5e2; stroke-width: 2; rx: 24; ry: 24; }
+      .box { stroke: #9fb3c8; stroke-width: 2; rx: 18; ry: 18; }
+      .sources { fill: #e7f6ea; }
+      .backrest { fill: #e8f0ff; }
+      .tailscale { fill: #e8fbff; }
+      .endpoint { fill: #fff2df; }
+      .repo { fill: #fff9d9; }
+      .note { fill: #eef3f8; stroke: #c7d4e1; stroke-width: 2; rx: 20; ry: 20; }
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #19324a; }
+      .subtitle { font: 500 18px Arial, Helvetica, sans-serif; fill: #4b6278; }
+      .panel-title { font: 700 28px Arial, Helvetica, sans-serif; fill: #19324a; }
+      .panel-subtitle { font: 500 18px Arial, Helvetica, sans-serif; fill: #4b6278; }
+      .box-title { font: 700 20px Arial, Helvetica, sans-serif; fill: #19324a; }
+      .body { font: 16px Arial, Helvetica, sans-serif; fill: #31485f; }
+      .small { font: 15px Arial, Helvetica, sans-serif; fill: #4b6278; }
+      .arrow-label { font: 700 18px Arial, Helvetica, sans-serif; fill: #1d7f5f; }
+      .reverse-label { font: 700 18px Arial, Helvetica, sans-serif; fill: #4b6278; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1400" height="860" />
+
+  <text class="title" x="700" y="48" text-anchor="middle">TailSafe one-friend overview</text>
+  <text class="subtitle" x="700" y="78" text-anchor="middle">Each site sends encrypted backups out and also hosts a dedicated inbound endpoint for the friend.</text>
+
+  <rect class="panel" x="40" y="110" width="620" height="560" />
+  <rect class="panel" x="740" y="110" width="620" height="560" />
+
+  <text class="panel-title" x="70" y="156">Your site (home-a)</text>
+  <text class="panel-subtitle" x="70" y="182">Runs the full stack locally.</text>
+  <text class="panel-title" x="770" y="156">Friend site (friend-b)</text>
+  <text class="panel-subtitle" x="770" y="182">Runs the same pattern in reverse.</text>
+
+  <rect class="box sources" x="80" y="220" width="210" height="92" />
+  <text class="box-title" x="100" y="252">Source folders</text>
+  <text class="body" x="100" y="278">Mounted read-only under</text>
+  <text class="body" x="100" y="300">`/userdata/*`</text>
+
+  <rect class="box backrest" x="330" y="210" width="250" height="112" />
+  <text class="box-title" x="350" y="244">Backrest + restic</text>
+  <text class="body" x="350" y="270">Schedules snapshots, encrypts data,</text>
+  <text class="body" x="350" y="292">and talks to remote repos.</text>
+
+  <rect class="box tailscale" x="330" y="352" width="250" height="100" />
+  <text class="box-title" x="350" y="386">tailscale-outbound</text>
+  <text class="body" x="350" y="412">Joins your own tailnet and exposes</text>
+  <text class="body" x="350" y="434">the HTTP proxy Backrest uses for egress.</text>
+
+  <rect class="box endpoint" x="80" y="360" width="210" height="162" />
+  <text class="box-title" x="100" y="392">Inbound endpoint for friend-b</text>
+  <text class="body" x="100" y="418">`tailscale-endpoint-friend-b`</text>
+  <text class="body" x="100" y="442">`rest-server-backup-friend-b`</text>
+  <text class="body" x="100" y="466">Port `8000`, append-only</text>
+  <text class="body" x="100" y="490">`rest-server-maintenance-friend-b`</text>
+  <text class="body" x="100" y="514">Port `8001`, maintenance only</text>
+
+  <rect class="box repo" x="80" y="552" width="210" height="88" />
+  <text class="box-title" x="100" y="584">Stored on your disk</text>
+  <text class="body" x="100" y="610">Friend-b's encrypted repo lives under</text>
+  <text class="body" x="100" y="632">`${REPO_DATA_ROOT}/friend-b`</text>
+
+  <rect class="box sources" x="780" y="220" width="210" height="92" />
+  <text class="box-title" x="800" y="252">Source folders</text>
+  <text class="body" x="800" y="278">Mounted read-only under</text>
+  <text class="body" x="800" y="300">`/userdata/*`</text>
+
+  <rect class="box backrest" x="1030" y="210" width="250" height="112" />
+  <text class="box-title" x="1050" y="244">Backrest + restic</text>
+  <text class="body" x="1050" y="270">Friend-b encrypts and schedules</text>
+  <text class="body" x="1050" y="292">their own outbound backups here.</text>
+
+  <rect class="box tailscale" x="1030" y="352" width="250" height="100" />
+  <text class="box-title" x="1050" y="386">tailscale-outbound</text>
+  <text class="body" x="1050" y="412">Friend-b's outbound node reaches</text>
+  <text class="body" x="1050" y="434">remote endpoint hostnames over Tailscale.</text>
+
+  <rect class="box endpoint" x="780" y="360" width="210" height="162" />
+  <text class="box-title" x="800" y="392">Inbound endpoint for home-a</text>
+  <text class="body" x="800" y="418">`tailscale-endpoint-home-a`</text>
+  <text class="body" x="800" y="442">`rest-server-backup-home-a`</text>
+  <text class="body" x="800" y="466">Port `8000`, append-only</text>
+  <text class="body" x="800" y="490">`rest-server-maintenance-home-a`</text>
+  <text class="body" x="800" y="514">Port `8001`, maintenance only</text>
+
+  <rect class="box repo" x="780" y="552" width="210" height="88" />
+  <text class="box-title" x="800" y="584">Stored on friend-b's disk</text>
+  <text class="body" x="800" y="610">Your encrypted repo lives under</text>
+  <text class="body" x="800" y="632">`${REPO_DATA_ROOT}/home-a`</text>
+
+  <line x1="290" y1="266" x2="330" y2="266" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+  <line x1="455" y1="322" x2="455" y2="352" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+  <line x1="185" y1="522" x2="185" y2="552" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+
+  <line x1="990" y1="266" x2="1030" y2="266" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+  <line x1="1155" y1="322" x2="1155" y2="352" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+  <line x1="885" y1="522" x2="885" y2="552" stroke="#2d4b66" stroke-width="4" marker-end="url(#arrow)" />
+
+  <line x1="580" y1="402" x2="780" y2="402" stroke="#1d7f5f" stroke-width="6" marker-end="url(#arrow-green)" />
+  <text class="arrow-label" x="680" y="372" text-anchor="middle">Your encrypted restic backup to friend-b</text>
+  <text class="small" x="680" y="396" text-anchor="middle">Backrest uses the Tailscale proxy to reach friend-b's endpoint on ports `8000` and `8001`.</text>
+
+  <line x1="1030" y1="480" x2="290" y2="480" stroke="#71869d" stroke-width="5" stroke-dasharray="12 10" marker-end="url(#arrow)" />
+  <text class="reverse-label" x="660" y="458" text-anchor="middle">Friend-b sends backups to your inbound endpoint the same way</text>
+
+  <rect class="note" x="40" y="706" width="1320" height="118" />
+  <text class="box-title" x="70" y="744">Safety basics shown in this diagram</text>
+  <text class="body" x="70" y="772">1. restic encrypts data before upload, so the host friend stores encrypted repository data rather than your plaintext files.</text>
+  <text class="body" x="70" y="796">2. Backup traffic stays on the Tailscale mesh, each friend gets dedicated endpoint services and credentials, and port `8000` is append-only.</text>
+  <text class="body" x="70" y="820">3. TailSafe improves privacy and network isolation, but the hosting friend still controls disk availability and can delete or withhold stored backups.</text>
+</svg>
