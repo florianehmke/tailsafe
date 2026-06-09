@@ -14,6 +14,10 @@ This guide assumes a **one-friend** path first (`home-a` ↔ `friend-b`). After 
 
 For the detailed rationale and mirrored examples on both sides, see [Setup guide](setup-guide.md). For field reference, see [Configuration](configuration.md) and [Networking](networking.md).
 
+## Runtime migration note
+
+The current runtime avoids shared-network-namespace coupling between Tailscale and sibling containers. Restarting or recreating a single container should only cause temporary interruption while that container rejoins the mesh or Serve forwards reconnect — not latent broken state that persists after the restarted container is healthy again.
+
 ## Before You Touch the Host
 
 Complete this intake before SSH, file copies, or `docker compose` commands.
@@ -152,7 +156,7 @@ docker compose --env-file .env \
   up -d
 ```
 
-After the configurator exits successfully, confirm `${BACKREST_DATA_ROOT}/generated` contains `backrest-config.json`, `compose.endpoints.yaml`, and the peer htpasswd files before running the second command. Do not start the long-lived stack without the generated fragment.
+After the configurator exits successfully, confirm `${BACKREST_DATA_ROOT}/generated` contains `backrest-config.json`, `compose.endpoints.yaml`, `tailscale-serve-<peer>.json` files, and the peer htpasswd files before running the second command. Do not start the long-lived stack without the generated fragment.
 
 The second command must use the real absolute `BACKREST_DATA_ROOT` path from `.env`, not the Synology example path if your host paths differ.
 
@@ -176,7 +180,7 @@ For `inbound-first`, treat steps 5–7 as deferred until outbound remotes are co
 | Signal | Meaning |
 | --- | --- |
 | `401` on `:8000` / `:8001` | healthy auth challenge, endpoint listener reachable |
-| `502 Bad Gateway` | request reached a proxy layer, but the backend path is broken |
+| `502 Bad Gateway` | Tailscale Serve reached the endpoint, but the TCP forward to the rest-server on the peer bridge network is broken or stale |
 | timeout / host unreachable | Tailscale routing, DNS, ACL, or node state is still broken |
 
 ## Phase 7: Troubleshoot by Symptom
@@ -199,16 +203,16 @@ Use these entries when validation fails. Start from the symptom you see in logs,
 
 ### `502 Bad Gateway`
 
-- Usually means: the request reached a proxy layer, but the rest-server backend is not attached cleanly
-- Likely causes: stale sidecars after endpoint recreate, backend service not sharing the expected namespace
-- Check next: endpoint container state, rest-server recreation for the affected peer, fresh `401` probe after restart
-- Healthy signal: `401` on the same port after recreation
+- Usually means: Tailscale Serve accepted the inbound connection on the endpoint hostname, but the TCP forward to the rest-server on the peer bridge network failed
+- Likely causes: stale or missing `tailscale-serve-<peer>.json` after configurator rerun, endpoint container not fully connected, rest-server not yet reachable on the peer bridge network
+- Check next: confirm the Serve config exists under `${BACKREST_DATA_ROOT}/generated`, inspect `tailscale-endpoint-<peer>` and the matching rest-server logs, recreate the endpoint trio if the Serve config changed
+- Healthy signal: `401` on the same port after the endpoint node and rest-servers are healthy
 
 ### `401` vs `200` vs timeout on `:8000` / `:8001`
 
 - Usually means: the probe reached different layers depending on which response you got
 - Likely causes: `401` without credentials is the expected auth challenge; `200` without credentials suggests a miswired backend or wrong listener; timeout means routing, DNS, ACL, or node state is still broken
-- Check next: probe both ports through the outbound userspace proxy (for example from the `tailscale-outbound` container where `HTTP_PROXY` is set, or via a manual Backrest backup attempt); compare backup (`8000`) and maintenance (`8001`) results. A host-shell `curl` without that proxy does not follow the outbound path
+- Check next: probe both ports through the outbound userspace proxy (for example from `backrest`, or from any container on `tailsafe-outbound` using `--proxy http://tailscale-outbound:1055`); compare backup (`8000`) and maintenance (`8001`) results. A host-shell `curl` without that proxy does not follow the outbound path
 - Healthy signal: `401` on both ports when probed without credentials
 
 ### `context deadline exceeded`

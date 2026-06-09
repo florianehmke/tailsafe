@@ -218,3 +218,13 @@ def backup_htpasswd_path(peer_id: str) -> str:
 def maintenance_htpasswd_path(peer_id: str) -> str:
     validate_identifier(peer_id, "inbound peer id")
     return f"/generated/rest-server-maint-{peer_id}.htpasswd"
+
+
+def endpoint_network_name(peer_id: str) -> str:
+    validate_identifier(peer_id, "inbound peer id")
+    return f"endpoint-net-{peer_id}"
+
+
+def serve_config_path(peer_id: str) -> str:
+    validate_identifier(peer_id, "inbound peer id")
+    return f"/generated/tailscale-serve-{peer_id}.json"

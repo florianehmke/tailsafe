@@ -10,6 +10,10 @@ This guide walks through a first TailSafe rollout between two sites:
 
 TailSafe supports multiple friends, but this guide intentionally teaches the **one-friend path first**. After the first exchange works, you can repeat the same pattern for additional friends by adding another outbound remote, another inbound peer, and another set of environment variables.
 
+## Runtime migration note
+
+The current runtime avoids shared-network-namespace coupling between Tailscale and sibling containers. Restarting or recreating a single container (for example `tailscale-outbound`, an endpoint node, or one rest-server) should only cause temporary interruption while that container comes back — not latent broken state that persists after the restarted container is healthy again.
+
 ## Use this guide with
 
 - `README.md` for the repo overview
@@ -208,6 +212,7 @@ Example one-friend `.env`:
 
 ```dotenv
 TAILSAFE_VERSION=0.2.3
+TAILSCALE_DOCKER_TAG=stable
 TAILSAFE_IMAGE_NAMESPACE=ghcr.io/pixeljonas/tailsafe
 TZ=Europe/Berlin
 
@@ -339,6 +344,7 @@ After it exits successfully, confirm that `${BACKREST_DATA_ROOT}/generated` cont
 
 - `backrest-config.json`
 - `compose.endpoints.yaml`
+- `tailscale-serve-friend-b.json`
 - `rest-server-backup-friend-b.htpasswd`
 - `rest-server-maint-friend-b.htpasswd`
 
@@ -412,6 +418,7 @@ Example friend-side `.env`:
 
 ```dotenv
 TAILSAFE_VERSION=0.2.3
+TAILSCALE_DOCKER_TAG=stable
 TAILSAFE_IMAGE_NAMESPACE=ghcr.io/pixeljonas/tailsafe
 TZ=Europe/Berlin
 
@@ -526,6 +533,7 @@ After it exits successfully, friend-b should confirm that their generated direct
 
 - `backrest-config.json`
 - `compose.endpoints.yaml`
+- `tailscale-serve-home-a.json`
 - `rest-server-backup-home-a.htpasswd`
 - `rest-server-maint-home-a.htpasswd`
 

@@ -18,11 +18,11 @@ The inbound endpoint services are now generated dynamically into `${BACKREST_DAT
 
 ### `.env`
 
-Environment variables consumed by Compose and also passed through to the configurator. For a first pair, start from `env.one-friend.example`; use `env.example` for the advanced multi-friend reference layout. It holds Tailscale auth keys, per-remote and per-peer HTTP passwords, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), and the path to your site file (`SITE_CONFIG_PATH`).
+Environment variables consumed by Compose and also passed through to the configurator. For a first pair, start from `env.one-friend.example`; use `env.example` for the advanced multi-friend reference layout. It holds Tailscale auth keys, per-remote and per-peer HTTP passwords, the restic repository password, filesystem paths (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related roots), the path to your site file (`SITE_CONFIG_PATH`), and the upstream Tailscale container tag (`TAILSCALE_DOCKER_TAG`, for example `stable`).
 
 ### `config/site.json`
 
-The site configuration consumed by the configurator to generate `backrest-config.json`, the inbound endpoint compose fragment, peer-specific htpasswd files, and related runtime material. For a first pair, start from `config/site.one-friend.example.json`; use `config/site.example.json` for the advanced multi-friend reference layout. Each site keeps its own copy with friend-specific remotes, inbound peers, schedules, sources, and Healthchecks.io URLs.
+The site configuration consumed by the configurator to generate `backrest-config.json`, the inbound endpoint compose fragment, per-peer `tailscale-serve-<peer>.json` Serve configs, peer-specific htpasswd files, and related runtime material. For a first pair, start from `config/site.one-friend.example.json`; use `config/site.example.json` for the advanced multi-friend reference layout. Each site keeps its own copy with friend-specific remotes, inbound peers, schedules, sources, and Healthchecks.io URLs.
 
 ## Required secrets
 
@@ -49,6 +49,7 @@ Related non-secret variables must also be set:
 | `TS_OUTBOUND_HOSTNAME` | Tailscale hostname registered by this site's outbound node (for example `tailsafe-outbound`). |
 | `TS_ENDPOINT_HOSTNAME_<PEER>` | Tailscale hostname registered by the generated endpoint node for that inbound peer. Your friend targets this hostname in their outbound URIs. |
 | `TAILSAFE_IMAGE_NAMESPACE` / `TAILSAFE_VERSION` | GHCR image namespace and pinned tag used by `deploy/compose.yaml` (see `env.example`). |
+| `TAILSCALE_DOCKER_TAG` | Upstream Tailscale container tag used by `tailscale-outbound` and generated endpoint nodes (for example `stable`; see `env.example`). |
 | Path roots (`BACKREST_DATA_ROOT`, `REPO_DATA_ROOT`, `USERDATA_ROOT`, and related) | Filesystem locations for generated assets, repository storage, userdata mounts, and Tailscale state. |
 
 Legacy single-remote deployments remain supported during the migration window. If you still use the old `remote` schema, TailSafe falls back to `TS_ENDPOINT_AUTHKEY`, `TS_ENDPOINT_HOSTNAME`, `TAILSAFE_BACKUP_HTTP_*`, and `TAILSAFE_MAINT_HTTP_*`.
@@ -144,6 +145,7 @@ The `configurator` service is a **one-shot** job with `restart: "no"`. It runs o
 - `backrest-config.json`
 - `compose.endpoints.yaml`
 - one backup and one maintenance htpasswd file per inbound peer
+- one `tailscale-serve-<peer>.json` file per inbound peer (Tailscale Serve TCP forward config for ports `8000` and `8001`)
 
 Restarting Backrest or the generated endpoint services does **not** regenerate those files.
 
@@ -161,4 +163,17 @@ Do not expect a normal `docker compose restart` of the long-lived services alone
 
 ### Outbound runtime (userspace proxy)
 
-On each site, `tailscale-outbound` runs userspace Tailscale and exposes a localhost HTTP proxy (`TS_OUTBOUND_PROXY_LISTEN`). Backrest uses `network_mode: service:tailscale-outbound` and proxy environment variables so backup and maintenance traffic to remote `rest:http://...` hostnames in `outboundRemotes[]` egresses over the mesh. `NO_PROXY` lists `hc-ping.com` (and local addresses) so Healthchecks pings use the normal internet path and do not go through the Tailscale proxy. Inbound endpoint trios are unchanged: friends still reach your rest-server ports on their peer-specific endpoint hostnames.
+On each site, `tailscale-outbound` and `backrest` share a bridge network (`tailsafe-outbound`). The outbound Tailscale container runs userspace Tailscale and exposes an HTTP proxy on port `1055` (`TS_OUTBOUND_HTTP_PROXY_LISTEN`). Backrest reaches remote `rest:http://...` hostnames in `outboundRemotes[]` through `HTTP_PROXY` / `HTTPS_PROXY` pointed at `http://tailscale-outbound:1055`. `NO_PROXY` lists `hc-ping.com` (and local addresses) so Healthchecks pings use the normal internet path and do not go through the Tailscale proxy. Inbound endpoint trios are unchanged: friends still reach your rest-server ports on their peer-specific endpoint hostnames.
+
+### One-sided migration
+
+The namespace-free runtime preserves endpoint hostnames, ports, credentials, and repository URI semantics. One site can migrate independently without requiring friend-side configuration changes.
+
+To upgrade an existing deployment to the namespace-free topology:
+
+1. Update `.env` tags: bump `TAILSAFE_VERSION` to a release that includes the namespace-free configurator and generator changes, and add `TAILSCALE_DOCKER_TAG` (for example `stable`; see `env.example`). Regeneration requires the updated configurator image — older pins will not emit `tailscale-serve-<peer>.json` or the new compose fragment.
+2. Refresh your local `deploy/compose.yaml` from `deploy/compose.example.yaml` and merge any site-specific paths or ports.
+3. Regenerate runtime assets with the updated configurator so per-peer `tailscale-serve-<peer>.json` files appear under `${BACKREST_DATA_ROOT}/generated`.
+4. Recreate the stack with both compose files so the bridge-network and Serve-forward topology is applied.
+
+Friend-side configuration changes are not required as long as your external endpoint hostnames, ports, credentials, and repository URIs stay the same. See [Networking](networking.md#one-sided-migration) for restart behavior after the upgrade.

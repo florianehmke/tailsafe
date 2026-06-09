@@ -16,7 +16,8 @@ rm -f \
   "$generated_dir"/rest-server-backup.htpasswd \
   "$generated_dir"/rest-server-maint.htpasswd \
   "$generated_dir"/rest-server-backup-*.htpasswd \
-  "$generated_dir"/rest-server-maint-*.htpasswd
+  "$generated_dir"/rest-server-maint-*.htpasswd \
+  "$generated_dir"/tailscale-serve-*.json
 
 export TAILSAFE_BACKREST_GENERATED_DIR="${TAILSAFE_BACKREST_GENERATED_DIR:-$generated_dir}"
 python /app/scripts/generate_backrest_config.py "$site_config" "$generated_dir/backrest-config.json"

@@ -16,7 +16,7 @@ Repository URIs in the example stack are plain `rest:http://...` over Tailscale,
 
 The example stack uses **userspace Tailscale** networking (no `NET_ADMIN` capability or `/dev/net/tun` device in Compose). Tailscale runs inside the container without host TUN setup.
 
-In userspace mode there is no host-style `tailscale0` interface that sibling containers can share transparently. Processes that share the outbound container's network namespace (such as Backrest) do not automatically route through Tailscale the way they would on a host with a TUN device.
+In userspace mode there is no host-style `tailscale0` interface that sibling containers can share transparently. Backrest does not automatically route through Tailscale the way it would on a host with a TUN device; it egresses over the mesh through the outbound container's HTTP proxy on the shared bridge network.
 
 ## Base stack plus generated endpoints
 
@@ -62,7 +62,7 @@ Your friends do the same in reverse: they issue their own outbound key locally a
 Healthy first probe expectations when testing a **remote** endpoint from the outbound site (through the userspace proxy path described in [Outbound role](#outbound-role); a host-shell `curl` without that proxy does not follow the outbound routing model):
 
 - `401` on `:8000` or `:8001` means the endpoint is reachable and challenging auth
-- `502` usually means a stale or broken backend attachment
+- `502` usually means Tailscale Serve reached the endpoint hostname, but the TCP forward to the rest-server on the peer bridge network (`endpoint-net-<peer>`) is broken or stale
 - timeout or host unreachable means the transport path is still broken
 
 For the full validation ladder and symptom-oriented follow-ups, see [Agent-assisted install](agent-install.md) Phase 6 and Phase 7.
@@ -78,13 +78,13 @@ For the full validation ladder and symptom-oriented follow-ups, see [Agent-assis
 
 The **outbound** role on your site initiates backup and maintenance traffic toward remote TailSafe stacks.
 
-- Container: `tailscale-outbound`
+- Container: `tailscale-outbound` (official `tailscale/tailscale` image)
 - Auth key: `TS_OUTBOUND_AUTHKEY` in `.env`
 - Hostname: `TS_OUTBOUND_HOSTNAME` in `.env`
-- Local proxy: `TS_OUTBOUND_PROXY_LISTEN` (default `localhost:1055` in `deploy/compose.example.yaml`)
-- Backrest shares this container's network namespace via `network_mode: service:tailscale-outbound`
+- Bridge network: `tailsafe-outbound` (shared with `backrest`)
+- HTTP proxy: `TS_OUTBOUND_HTTP_PROXY_LISTEN` (default `:1055` in `deploy/compose.example.yaml`)
 
-`tailscale-outbound` starts a localhost HTTP proxy for mesh egress. Backrest reaches remote endpoint hostnames from `outboundRemotes[]` through `HTTP_PROXY` / `HTTPS_PROXY` pointed at that listener (for example `http://127.0.0.1:1055`). Healthchecks pings stay on `NO_PROXY` so they do not traverse the proxy. Backrest does not serve repository traffic to other sites through this role.
+`tailscale-outbound` and `backrest` attach to the same bridge network. The outbound container starts an HTTP proxy for mesh egress on port `1055`. Backrest reaches remote endpoint hostnames from `outboundRemotes[]` through `HTTP_PROXY` / `HTTPS_PROXY` pointed at `http://tailscale-outbound:1055`. Healthchecks pings stay on `NO_PROXY` so they do not traverse the proxy. Backrest does not serve repository traffic to other sites through this role.
 
 ## Inbound endpoint trios
 
@@ -96,9 +96,13 @@ Each `inboundPeers[]` entry generates a dedicated endpoint trio on your site:
 
 Every trio gets:
 
-- its own Tailscale auth key and hostname
+- its own per-peer bridge network (`endpoint-net-<peer>`)
+- its own Tailscale auth key and hostname (official `tailscale/tailscale` image)
+- its own `tailscale-serve-<peer>.json` Serve config referenced by `TS_SERVE_CONFIG`
 - its own backup and maintenance htpasswd files
 - its own repository storage root at `${REPO_DATA_ROOT}/<repositorySubdir>`
+
+The three containers in each trio share a dedicated peer bridge network (`endpoint-net-<peer>`). The endpoint container loads Tailscale Serve config from `TS_SERVE_CONFIG` and forwards mesh ports `8000` and `8001` to `rest-server-backup-<peer>:8000` and `rest-server-maintenance-<peer>:8001` on that bridge network. Friends connect to the peer-specific Tailscale hostname; they do not address the rest-server containers directly.
 
 The endpoint exposes two rest-server listeners on that peer-specific Tailscale hostname:
 
@@ -111,7 +115,7 @@ Friends connect to these ports using the plain `rest:http://user:password@<endpo
 
 ## UI exposure
 
-Backrest serves its web UI on port `9898` inside the outbound Tailscale container's network namespace. In the example deployment, Compose publishes that port only on the loopback interface:
+Backrest serves its web UI on port `9898` on the outbound bridge network. In the example deployment, Compose publishes that port only on the loopback interface:
 
 ```yaml
 ports:
@@ -132,6 +136,21 @@ After a cold start:
 - a friend's first inbound attempt may fail if their corresponding `tailscale-endpoint-<peer>` node is not fully connected yet
 
 Retry the operation manually or wait for the next scheduled run once Tailscale shows the node as connected.
+
+## One-sided migration
+
+The namespace-free runtime preserves endpoint hostnames, ports, credentials, and repository URI semantics. One site can migrate independently without requiring friend-side configuration changes.
+
+To upgrade an existing deployment:
+
+1. Update `.env` tags: bump `TAILSAFE_VERSION` to a namespace-free release and add `TAILSCALE_DOCKER_TAG`.
+2. Refresh `deploy/compose.yaml` from the example and merge site-specific paths or ports.
+3. Regenerate assets with the updated configurator (including `tailscale-serve-<peer>.json`).
+4. Recreate the stack with both compose files.
+
+Full sequence and notes: [Configuration — One-sided migration](configuration.md#one-sided-migration).
+
+The runtime avoids shared-network-namespace coupling between Tailscale and sibling containers. Restarting or recreating a single container in an outbound or endpoint group should only cause temporary interruption while that container rejoins the mesh or Serve forwards reconnect — not latent broken state that persists after the restarted container is healthy again.
 
 ## Preflight scope
 

@@ -28,6 +28,7 @@ mkdir -p .tmp/generated .tmp/rest-data
 cp env.example .tmp/compose.env
 touch .tmp/generated/rest-server-backup-stale.htpasswd
 touch .tmp/generated/rest-server-maint-stale.htpasswd
+touch .tmp/generated/tailscale-serve-stale.json
 "$container_bin" build -t tailsafe-configurator:test -f containers/configurator/Dockerfile .
 "$container_bin" build -t tailsafe-rest-server:test -f containers/rest-server/Dockerfile .
 "$container_bin" run --rm \
@@ -44,9 +45,16 @@ test -s .tmp/generated/rest-server-backup-friend-b.htpasswd
 test -s .tmp/generated/rest-server-maint-friend-b.htpasswd
 test -s .tmp/generated/rest-server-backup-friend-c.htpasswd
 test -s .tmp/generated/rest-server-maint-friend-c.htpasswd
+test -s .tmp/generated/tailscale-serve-friend-b.json
+test -s .tmp/generated/tailscale-serve-friend-c.json
+grep -q '"TCPForward": "rest-server-backup-friend-b:8000"' .tmp/generated/tailscale-serve-friend-b.json
+grep -q '"TCPForward": "rest-server-maintenance-friend-b:8001"' .tmp/generated/tailscale-serve-friend-b.json
+grep -q '"TCPForward": "rest-server-backup-friend-c:8000"' .tmp/generated/tailscale-serve-friend-c.json
+grep -q '"TCPForward": "rest-server-maintenance-friend-c:8001"' .tmp/generated/tailscale-serve-friend-c.json
 test ! -e .tmp/generated/htpasswd-manifest.json
 test ! -e .tmp/generated/rest-server-backup-stale.htpasswd
 test ! -e .tmp/generated/rest-server-maint-stale.htpasswd
+test ! -e .tmp/generated/tailscale-serve-stale.json
 
 TAILSAFE_COMPOSE_ENV_FILE=../.tmp/compose.env \
   "${compose_cmd[@]}" \

@@ -23,6 +23,9 @@ python3 scripts/generate_runtime_assets.py \
   .tmp/generated/compose.endpoints.yaml \
   .tmp/generated/htpasswd-manifest.json
 
+python3 -m json.tool .tmp/generated/tailscale-serve-friend-b.json >/dev/null
+python3 -m json.tool .tmp/generated/tailscale-serve-friend-c.json >/dev/null
+
 TAILSAFE_COMPOSE_ENV_FILE=../.tmp/compose.env \
   "${compose_cmd[@]}" \
   --env-file env.example \

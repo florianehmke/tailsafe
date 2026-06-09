@@ -123,7 +123,9 @@ def legacy_site_config() -> dict:
 class GenerateRuntimeAssetsTest(unittest.TestCase):
     maxDiff = None
 
-    def run_generator(self, site_config: dict, env: dict[str, str]) -> tuple[str, dict]:
+    def run_generator(
+        self, site_config: dict, env: dict[str, str]
+    ) -> tuple[str, dict, dict[str, dict]]:
         with tempfile.TemporaryDirectory() as tmpdir:
             input_path = os.path.join(tmpdir, "site.json")
             compose_path = os.path.join(tmpdir, "compose.endpoints.yaml")
@@ -149,10 +151,17 @@ class GenerateRuntimeAssetsTest(unittest.TestCase):
             with open(manifest_path, "r", encoding="utf-8") as handle:
                 manifest = json.load(handle)
 
-            return compose_text, manifest
+            serve_configs: dict[str, dict] = {}
+            for peer in manifest.get("peers", []):
+                peer_id = peer["id"]
+                serve_path = os.path.join(tmpdir, f"tailscale-serve-{peer_id}.json")
+                with open(serve_path, "r", encoding="utf-8") as handle:
+                    serve_configs[peer_id] = json.load(handle)
+
+            return compose_text, manifest, serve_configs
 
     def test_generator_creates_endpoint_trios_for_each_inbound_peer(self) -> None:
-        compose_text, manifest = self.run_generator(
+        compose_text, manifest, serve_configs = self.run_generator(
             multisite_site_config(),
             {
                 "TAILSAFE_REMOTE_BACKUP_HTTP_PASSWORD_FRIEND_B": "remote-backup-password-b",
@@ -167,20 +176,61 @@ class GenerateRuntimeAssetsTest(unittest.TestCase):
             },
         )
 
+        self.assertNotIn("network_mode: service:", compose_text)
         self.assertIn("tailscale-endpoint-friend-b:", compose_text)
         self.assertIn("tailscale-endpoint-friend-c:", compose_text)
         self.assertIn("rest-server-backup-friend-b:", compose_text)
         self.assertIn("rest-server-maintenance-friend-c:", compose_text)
+        self.assertIn("image: tailscale/tailscale:${TAILSCALE_DOCKER_TAG}", compose_text)
         self.assertIn("TS_AUTHKEY: ${TS_ENDPOINT_AUTHKEY_FRIEND_B}", compose_text)
         self.assertIn("TS_AUTHKEY: ${TS_ENDPOINT_AUTHKEY_FRIEND_C}", compose_text)
+        self.assertIn('TS_AUTH_ONCE: "true"', compose_text)
+        self.assertIn('TS_USERSPACE: "true"', compose_text)
+        self.assertIn("TS_EXTRA_ARGS: --accept-dns=false", compose_text)
         self.assertIn("TS_HOSTNAME: tailsafe-endpoint-friend-b", compose_text)
         self.assertIn("TS_HOSTNAME: tailsafe-endpoint-friend-c", compose_text)
+        self.assertIn(
+            "TS_SERVE_CONFIG: /generated/tailscale-serve-friend-b.json", compose_text
+        )
+        self.assertIn(
+            "TS_SERVE_CONFIG: /generated/tailscale-serve-friend-c.json", compose_text
+        )
         self.assertIn("${TAILSAFE_STATE_ROOT}/endpoint-friend-b:/var/lib/tailscale", compose_text)
         self.assertIn("${TAILSAFE_STATE_ROOT}/endpoint-friend-c:/var/lib/tailscale", compose_text)
+        self.assertIn("${BACKREST_DATA_ROOT}/generated:/generated:ro", compose_text)
         self.assertIn("${REPO_DATA_ROOT}/friend-b:/data", compose_text)
         self.assertIn("${REPO_DATA_ROOT}/friend-c:/data", compose_text)
         self.assertIn("/generated/rest-server-backup-friend-b.htpasswd", compose_text)
         self.assertIn("/generated/rest-server-maint-friend-c.htpasswd", compose_text)
+        self.assertIn("endpoint-net-friend-b:", compose_text)
+        self.assertIn("endpoint-net-friend-c:", compose_text)
+        for peer_id in ("friend-b", "friend-c"):
+            with self.subTest(peer_id=peer_id):
+                self.assertIn(
+                    f"  tailscale-endpoint-{peer_id}:\n"
+                    "    image: tailscale/tailscale:${TAILSCALE_DOCKER_TAG}\n"
+                    "    depends_on:\n"
+                    "      configurator:\n"
+                    "        condition: service_completed_successfully",
+                    compose_text,
+                )
+
+        self.assertEqual(
+            serve_configs["friend-b"]["TCP"]["8000"]["TCPForward"],
+            "rest-server-backup-friend-b:8000",
+        )
+        self.assertEqual(
+            serve_configs["friend-b"]["TCP"]["8001"]["TCPForward"],
+            "rest-server-maintenance-friend-b:8001",
+        )
+        self.assertEqual(
+            serve_configs["friend-c"]["TCP"]["8000"]["TCPForward"],
+            "rest-server-backup-friend-c:8000",
+        )
+        self.assertEqual(
+            serve_configs["friend-c"]["TCP"]["8001"]["TCPForward"],
+            "rest-server-maintenance-friend-c:8001",
+        )
 
         self.assertEqual(
             manifest,
@@ -209,7 +259,7 @@ class GenerateRuntimeAssetsTest(unittest.TestCase):
         )
 
     def test_generator_supports_legacy_single_endpoint_defaults(self) -> None:
-        compose_text, manifest = self.run_generator(
+        compose_text, manifest, serve_configs = self.run_generator(
             legacy_site_config(),
             {
                 "TAILSAFE_BACKUP_HTTP_USER": "backup",

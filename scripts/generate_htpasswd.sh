@@ -17,7 +17,7 @@ write_pair() {
 
 if [ "$#" -eq 1 ]; then
   manifest_path="$1"
-  python - "$manifest_path" <<'PY'
+  python3 - "$manifest_path" <<'PY'
 import json
 import os
 import subprocess

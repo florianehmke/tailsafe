@@ -6,11 +6,11 @@ TailSafe is a container-based friend-to-friend offsite backup project for Synolo
 
 - GHCR-hosted runtime images
 - an example base Compose deployment plus a generated endpoint fragment
-- generators for Backrest `backrest-config.json` and `compose.endpoints.yaml`
+- generators for Backrest `backrest-config.json`, `compose.endpoints.yaml`, and per-peer `tailscale-serve-<peer>.json` Serve configs
 - helper scripts for local preflight checks (source paths and required secrets) and REST auth material
 - operator docs for setup, restore, and troubleshooting
 
-Only the TailSafe-owned configurator image is UBI-based right now. The Backrest, rest-server, and Tailscale images remain thin wrappers around their upstream images.
+Only the TailSafe-owned configurator image is UBI-based right now. Tailscale runs from the official `tailscale/tailscale` container directly; Backrest and rest-server images remain thin wrappers around their upstream images.
 
 ## What it does not ship
 
@@ -88,6 +88,6 @@ TailSafe publishes images and examples. You own the real deployment files used a
 - `deploy/compose.yaml` — your site-local Compose stack (copy from `deploy/compose.example.yaml`)
 - `.env` — secrets and path configuration (copy from `env.one-friend.example` for a first pair, or `env.example` for multi-friend layouts)
 - `config/site.json` — schedules, sources, outbound remotes, inbound peers, and Healthchecks.io URLs (copy from `config/site.one-friend.example.json` for a first pair, or `config/site.example.json` for multi-friend layouts)
-- `${BACKREST_DATA_ROOT}/generated/compose.endpoints.yaml` — generated inbound endpoint services for your configured peers
+- `${BACKREST_DATA_ROOT}/generated/` — generated runtime assets, including `compose.endpoints.yaml`, per-peer `tailscale-serve-<peer>.json` Serve configs, htpasswd files, and `backrest-config.json`
 
 Keep production copies on the host or in private storage; do not commit them to this repository.

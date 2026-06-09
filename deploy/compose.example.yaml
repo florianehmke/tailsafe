@@ -13,21 +13,23 @@ services:
     restart: "no"
 
   tailscale-outbound:
-    image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-tailscale:${TAILSAFE_VERSION}
+    image: tailscale/tailscale:${TAILSCALE_DOCKER_TAG}
     environment:
       TS_AUTHKEY: ${TS_OUTBOUND_AUTHKEY}
+      TS_AUTH_ONCE: "true"
       TS_HOSTNAME: ${TS_OUTBOUND_HOSTNAME}
       TS_STATE_DIR: /var/lib/tailscale
-      TS_OUTBOUND_PROXY_LISTEN: localhost:1055
+      TS_USERSPACE: "true"
+      TS_OUTBOUND_HTTP_PROXY_LISTEN: :1055
+      TS_EXTRA_ARGS: --accept-dns=false
     volumes:
       - ${TAILSAFE_STATE_ROOT}/outbound:/var/lib/tailscale
-    ports:
-      - "127.0.0.1:${BACKREST_BIND_PORT}:9898"
+    networks:
+      - tailsafe-outbound
     restart: unless-stopped
 
   backrest:
     image: ${TAILSAFE_IMAGE_NAMESPACE}/tailsafe-backrest:${TAILSAFE_VERSION}
-    network_mode: service:tailscale-outbound
     depends_on:
       configurator:
         condition: service_completed_successfully
@@ -41,10 +43,10 @@ services:
       TMPDIR: /tmp
       TZ: ${TZ}
       RESTIC_REPOSITORY_PASSWORD: ${RESTIC_REPOSITORY_PASSWORD}
-      HTTP_PROXY: http://127.0.0.1:1055
-      HTTPS_PROXY: http://127.0.0.1:1055
-      http_proxy: http://127.0.0.1:1055
-      https_proxy: http://127.0.0.1:1055
+      HTTP_PROXY: http://tailscale-outbound:1055
+      HTTPS_PROXY: http://tailscale-outbound:1055
+      http_proxy: http://tailscale-outbound:1055
+      https_proxy: http://tailscale-outbound:1055
       NO_PROXY: 127.0.0.1,localhost,hc-ping.com
       no_proxy: 127.0.0.1,localhost,hc-ping.com
     volumes:
@@ -53,4 +55,12 @@ services:
       - ${BACKREST_DATA_ROOT}/cache:/cache
       - ${BACKREST_DATA_ROOT}/tmp:/tmp
       - ${USERDATA_ROOT}:/userdata:ro
+    ports:
+      - "127.0.0.1:${BACKREST_BIND_PORT}:9898"
+    networks:
+      - tailsafe-outbound
     restart: unless-stopped
+
+networks:
+  tailsafe-outbound:
+    driver: bridge
